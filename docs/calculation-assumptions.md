@@ -1,6 +1,6 @@
 # Calculation Assumptions & Provenance
 
-**Status:** Phase 0 — structure only. No trading calculation is implemented yet.
+**Status:** Phase 2 — RG-001 (RiskGuard) shipped. No other trading calculation is implemented yet.
 
 This document is the single place to record where a formula comes from, what it assumes, and how
 it is tested. A calculation must have a record here **before** it ships.
@@ -85,33 +85,49 @@ Tool-specific deviations must be recorded in the formula entry.
 
 ---
 
-## 6. Record template
+## 6. Shipped record
 
-> This is a **template only**. It is not a shipped formula and must not be treated as a product
-> specification.
-
-```md
 ### RG-001 — Position size from risk budget
 
-- **Tool:** RiskGuard
-- **Status:** draft
-- **Definition:** quantity = floor(maxRiskPaise / riskPerUnitPaise)
+- **Tool:** RiskGuard (`features/risk-guard/risk-guard.ts`, `decidePosition`)
+- **Status:** shipped
+- **Definition:**
+  - `riskBudgetPaise = floor(capitalPaise × riskBps / 10_000)`
+  - long: `riskPerUnitPaise = entryPaise − stopPaise`; short: `riskPerUnitPaise = stopPaise − entryPaise`
+  - `maxQuantity = floor(riskBudgetPaise / riskPerUnitPaise)`
+  - `lots = floor(maxQuantity / lotSize)`; `quantity = lots × lotSize`
+  - `usedRiskPaise = quantity × riskPerUnitPaise`
+  - with target — long: `reward = targetPaise − entryPaise`; short: `reward = entryPaise − targetPaise`;
+    `riskRewardRatio = reward / riskPerUnitPaise`. Without a target, R:R is absent (null), never fabricated.
 - **Inputs:**
-  - capitalPaise: integer paise, > 0
-  - riskPercentBps: integer bps, > 0
+  - capitalPaise: integer paise, 1 … 1_000_000_000_000 (₹100 crore)
+  - riskBps: integer basis points, 1 … 10_000 (0.01% … 100%)
+  - direction: `long` | `short`
   - entryPaise, stopLossPaise: integer paise, > 0
-  - lotSize: integer units, >= 1
-- **Outputs:** quantity (integer units), lots (integer)
-- **Assumptions:** long or short direction is explicit; stop is on the loss side of entry;
-  charges and slippage are excluded.
-- **Rounding:** floor to whole units; floor to whole lots for F&O.
-- **Edge cases:** riskPerUnit = 0 → error; budget below one lot → explicit blocked state;
-  missing target → R:R is null.
-- **Source:** independently derived arithmetic; no proprietary method.
-- **Effective date:** n/a
-- **Implementation version:** 0.0.0 (not implemented)
-- **Tests:** none yet
-```
+  - lotSize: integer units, 1 … 1_000_000
+  - targetPaise: optional integer paise, > 0
+- **Outputs:** riskBudgetPaise, riskPerUnitPaise, maxQuantity, lots, quantity, usedRiskPaise,
+  unusedRiskPaise, rewardPerUnitPaise | null, riskRewardRatio | null (plain ratio; display only)
+- **Assumptions:** direction is explicit; stop is on the loss side of entry; target, if given, is
+  on the profit side; brokerage, taxes, charges and slippage are excluded.
+- **Units:** paise, basis points, integer quantity, integer lots.
+- **Rounding policy:** floor to whole units, then floor to whole lots (never round up — rounding
+  up could exceed the stated risk). R:R is computed from unrounded paise values and displayed to
+  two decimals.
+- **Edge cases:**
+  - stop on the wrong side of entry (or equal) → blocked `invalid_stop`
+  - risk budget below the cost of one lot → blocked `too_small_for_one_lot` (includes the
+    one-paise-short boundary: budget 99_999 against a 100_000 one-lot cost)
+  - budget rounding to zero → blocked `invalid_input`
+  - target on the wrong side of entry (or equal) → blocked `invalid_target`
+  - non-positive or out-of-range input → blocked `invalid_input`
+  - blocked results carry the budget, per-unit risk (when known), one-lot cost and max affordable
+    quantity so the user sees the maths
+- **Source:** independently derived arithmetic; public mathematics only. No proprietary method.
+- **Effective date:** n/a (not a statutory rate)
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/risk-guard.test.ts` (happy paths, boundaries, blocked cases, precision,
+  input boundary); `e2e/risk-guard.spec.ts` (allowed flow, blocked flow, axe scan)
 
 ---
 
@@ -146,4 +162,4 @@ broker. A rate change is a data change, not a formula change.
 
 ## 9. Implemented calculations
 
-_None yet. Phase 0 intentionally contains no trading formulas._
+- RG-001 — Position size from risk budget (RiskGuard, v1.0.0, shipped). See §6.

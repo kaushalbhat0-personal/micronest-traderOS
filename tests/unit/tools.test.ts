@@ -24,18 +24,18 @@ describe("tool registry", () => {
     expect(new Set(TOOLS.map((tool) => tool.slug)).size).toBe(TOOLS.length);
   });
 
-  it("marks RiskGuard as coming soon and everything else as planned", () => {
+  it("marks RiskGuard as live and everything else as planned", () => {
     const riskGuard = TOOLS.find((tool) => tool.id === "risk-guard");
-    expect(riskGuard?.status).toBe("coming_soon");
+    expect(riskGuard?.status).toBe("live");
 
     const others = TOOLS.filter((tool) => tool.id !== "risk-guard");
     expect(others.every((tool) => tool.status === "planned")).toBe(true);
   });
 
-  it("claims no live tool yet", () => {
+  it("claims one live tool", () => {
     const statuses: ToolStatus[] = TOOLS.map((tool) => tool.status);
 
-    expect(statuses).not.toContain("live");
+    expect(statuses.filter((status) => status === "live")).toHaveLength(1);
   });
 
   it("assigns every tool to a declared group", () => {
@@ -62,8 +62,8 @@ describe("tool registry", () => {
   it("reports a status ledger that matches the registry", () => {
     const counts = statusCounts();
 
-    expect(counts.live).toBe(0);
-    expect(counts.coming_soon).toBe(1);
+    expect(counts.live).toBe(1);
+    expect(counts.coming_soon).toBe(0);
     expect(counts.planned).toBe(9);
     expect(counts.live + counts.coming_soon + counts.planned).toBe(TOOLS.length);
   });

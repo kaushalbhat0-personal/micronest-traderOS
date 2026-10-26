@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 const PAGES = [
   { path: "/", heading: "Understand your trade before taking it." },
   { path: "/tools", heading: "Tools" },
+  { path: "/tools/risk-guard", heading: "RiskGuard" },
   { path: "/pricing", heading: "Pricing" },
   { path: "/disclaimer", heading: "Disclaimer" },
 ] as const;
@@ -59,7 +60,7 @@ test("landing page introduces the problem, the toolkit and the philosophy", asyn
 
   const statusLine = page.getByText(/10 tools/);
   await expect(statusLine).toContainText("9 planned");
-  await expect(statusLine).toContainText("none live yet");
+  await expect(statusLine).toContainText("1 live");
 
   await expect(page.getByRole("link", { name: "Browse all tools" })).toHaveAttribute(
     "href",
@@ -74,9 +75,9 @@ test("tools index lists all ten tools with honest statuses", async ({ page }) =>
     await expect(page.getByRole("heading", { level: 3, name })).toBeVisible();
   }
 
-  await expect(page.getByText("Coming soon")).toHaveCount(1);
+  await expect(page.getByText("Coming soon")).toHaveCount(0);
   await expect(page.getByText("Planned")).toHaveCount(9);
-  await expect(page.getByText("Live", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Live", { exact: true })).toHaveCount(1);
 });
 
 test("tool group links resolve to rendered sections", async ({ page }) => {

@@ -1,0 +1,446 @@
+"use client";
+
+import { useState, type FormEvent, type ReactNode } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { Card } from "@/components/ui/card";
+import {
+  decidePosition,
+  type RiskGuardBlocked,
+  type RiskGuardResult,
+} from "@/features/risk-guard/risk-guard";
+import {
+  riskGuardFieldsSchema,
+  toRiskGuardInput,
+  type RiskGuardRawFields,
+} from "@/features/risk-guard/validation";
+
+const inrExact = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Display-only formatting at the UI edge; the engine only sees integer paise. */
+function formatPaise(paise: number): string {
+  return inrExact.format(paise / 100);
+}
+
+function formatCount(value: number): string {
+  return value.toLocaleString("en-IN");
+}
+
+const EMPTY_FIELDS: RiskGuardRawFields = {
+  capital: "",
+  riskPercent: "",
+  direction: "long",
+  entry: "",
+  stop: "",
+  lotSize: "",
+  target: "",
+};
+
+const INPUT_CLASS =
+  "tnum min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-ink placeholder:text-ink-muted/70";
+const LABEL_CLASS = "type-label block text-ink";
+const HINT_CLASS = "type-caption mt-1 text-ink-muted";
+const ERROR_CLASS = "type-caption mt-1 font-medium text-danger";
+
+function Field({
+  id,
+  label,
+  hint,
+  error,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  error?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className={LABEL_CLASS}>
+        {label}
+      </label>
+      {children}
+      {error ? (
+        <p id={`${id}-error`} className={ERROR_CLASS}>
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={`${id}-hint`} className={HINT_CLASS}>
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ReceiptRow({ term, value }: { term: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-1.5">
+      <dt className="type-helper text-ink-muted">{term}</dt>
+      <dd className="tnum type-helper shrink-0 text-right text-ink">{value}</dd>
+    </div>
+  );
+}
+
+function BlockedDetails({ result }: { result: RiskGuardBlocked }) {
+  return (
+    <dl className="mt-4 divide-y divide-line border-t border-line">
+      <ReceiptRow term="Risk budget" value={formatPaise(result.riskBudgetPaise)} />
+      {result.riskPerUnitPaise !== null ? (
+        <ReceiptRow term="Per-unit risk" value={formatPaise(result.riskPerUnitPaise)} />
+      ) : null}
+      {result.requiredForOneLotPaise !== null ? (
+        <ReceiptRow
+          term="Risk required for one lot"
+          value={formatPaise(result.requiredForOneLotPaise)}
+        />
+      ) : null}
+      <ReceiptRow term="Maximum affordable quantity" value={formatCount(result.maxQuantity)} />
+    </dl>
+  );
+}
+
+export function RiskGuardCalculator() {
+  const [fields, setFields] = useState<RiskGuardRawFields>(EMPTY_FIELDS);
+  const [errors, setErrors] = useState<Partial<Record<keyof RiskGuardRawFields, string>>>({});
+  const [result, setResult] = useState<RiskGuardResult | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+
+  function setField(name: keyof RiskGuardRawFields, value: string) {
+    setFields((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = riskGuardFieldsSchema.safeParse(fields);
+    if (!parsed.success) {
+      const fieldErrors: Partial<Record<keyof RiskGuardRawFields, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0] as keyof RiskGuardRawFields | undefined;
+        if (key && !fieldErrors[key]) fieldErrors[key] = issue.message;
+      }
+      setErrors(fieldErrors);
+      setResult(null);
+      setAnnouncement("Check the highlighted fields and try again.");
+      return;
+    }
+    setErrors({});
+    const decision = decidePosition(toRiskGuardInput(parsed.data));
+    setResult(decision);
+    setAnnouncement(
+      decision.status === "allowed"
+        ? `Allowed quantity ${formatCount(decision.quantity)} in ${formatCount(decision.lots)} lots.`
+        : `Trade blocked. ${decision.reason}`,
+    );
+  }
+
+  const describe = (id: string, hint: boolean, hasError: boolean) =>
+    hasError ? `${id}-error` : hint ? `${id}-hint` : undefined;
+
+  return (
+    <div className="grid items-start gap-6 lg:grid-cols-2">
+      <Card as="section" aria-labelledby="risk-guard-inputs-heading">
+        <h2 id="risk-guard-inputs-heading" className="type-section">
+          Your inputs
+        </h2>
+        <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-6">
+          <fieldset className="space-y-4">
+            <legend className="type-eyebrow text-ink-muted">Risk budget</legend>
+            <Field
+              id="rg-capital"
+              label="Capital (₹)"
+              hint="Total capital you are sizing against."
+              error={errors.capital}
+            >
+              <input
+                id="rg-capital"
+                name="capital"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="100000"
+                value={fields.capital}
+                onChange={(event) => setField("capital", event.target.value)}
+                aria-invalid={Boolean(errors.capital)}
+                aria-describedby={describe("rg-capital", true, Boolean(errors.capital))}
+                className={`${INPUT_CLASS} mt-1.5 ${errors.capital ? "border-danger" : ""}`}
+              />
+            </Field>
+            <Field
+              id="rg-risk"
+              label="Risk %"
+              hint="How much of your capital you accept losing on this trade."
+              error={errors.riskPercent}
+            >
+              <input
+                id="rg-risk"
+                name="riskPercent"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="2.5"
+                value={fields.riskPercent}
+                onChange={(event) => setField("riskPercent", event.target.value)}
+                aria-invalid={Boolean(errors.riskPercent)}
+                aria-describedby={describe("rg-risk", true, Boolean(errors.riskPercent))}
+                className={`${INPUT_CLASS} mt-1.5 ${errors.riskPercent ? "border-danger" : ""}`}
+              />
+            </Field>
+          </fieldset>
+
+          <fieldset className="space-y-4">
+            <legend className="type-eyebrow text-ink-muted">Trade</legend>
+            <div>
+              <span id="rg-direction-label" className={LABEL_CLASS}>
+                Direction
+              </span>
+              <div
+                role="radiogroup"
+                aria-labelledby="rg-direction-label"
+                className="mt-1.5 grid grid-cols-2 gap-2"
+              >
+                {(
+                  [
+                    { value: "long", label: "Long" },
+                    { value: "short", label: "Short" },
+                  ] as const
+                ).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`type-label inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 transition-colors ${
+                      fields.direction === option.value
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-line bg-surface text-ink-muted"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="direction"
+                      value={option.value}
+                      checked={fields.direction === option.value}
+                      onChange={() => setField("direction", option.value)}
+                      className="size-4 accent-[#064e3b]"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              {errors.direction ? (
+                <p id="rg-direction-error" className={ERROR_CLASS}>
+                  {errors.direction}
+                </p>
+              ) : null}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 sm:gap-3 lg:grid-cols-1 xl:grid-cols-2">
+              <Field
+                id="rg-entry"
+                label="Entry (₹)"
+                hint="Your planned entry price."
+                error={errors.entry}
+              >
+                <input
+                  id="rg-entry"
+                  name="entry"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="100"
+                  value={fields.entry}
+                  onChange={(event) => setField("entry", event.target.value)}
+                  aria-invalid={Boolean(errors.entry)}
+                  aria-describedby={describe("rg-entry", true, Boolean(errors.entry))}
+                  className={`${INPUT_CLASS} mt-1.5 ${errors.entry ? "border-danger" : ""}`}
+                />
+              </Field>
+              <Field
+                id="rg-stop"
+                label="Stop-loss (₹)"
+                hint="Below entry for long, above for short."
+                error={errors.stop}
+              >
+                <input
+                  id="rg-stop"
+                  name="stop"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="95"
+                  value={fields.stop}
+                  onChange={(event) => setField("stop", event.target.value)}
+                  aria-invalid={Boolean(errors.stop)}
+                  aria-describedby={describe("rg-stop", true, Boolean(errors.stop))}
+                  className={`${INPUT_CLASS} mt-1.5 ${errors.stop ? "border-danger" : ""}`}
+                />
+              </Field>
+            </div>
+            <Field
+              id="rg-lotsize"
+              label="Lot size"
+              hint="Units per lot. Use 1 for equity delivery."
+              error={errors.lotSize}
+            >
+              <input
+                id="rg-lotsize"
+                name="lotSize"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="1"
+                value={fields.lotSize}
+                onChange={(event) => setField("lotSize", event.target.value)}
+                aria-invalid={Boolean(errors.lotSize)}
+                aria-describedby={describe("rg-lotsize", true, Boolean(errors.lotSize))}
+                className={`${INPUT_CLASS} mt-1.5 ${errors.lotSize ? "border-danger" : ""}`}
+              />
+            </Field>
+          </fieldset>
+
+          <fieldset className="space-y-4">
+            <legend className="type-eyebrow text-ink-muted">Optional</legend>
+            <Field
+              id="rg-target"
+              label="Target (₹)"
+              hint="Leave blank if you have no target. R:R is only shown with a target."
+              error={errors.target}
+            >
+              <input
+                id="rg-target"
+                name="target"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="Optional"
+                value={fields.target}
+                onChange={(event) => setField("target", event.target.value)}
+                aria-invalid={Boolean(errors.target)}
+                aria-describedby={describe("rg-target", true, Boolean(errors.target))}
+                className={`${INPUT_CLASS} mt-1.5 ${errors.target ? "border-danger" : ""}`}
+              />
+            </Field>
+          </fieldset>
+
+          <Button type="submit" className="w-full sm:w-auto">
+            Calculate position size
+          </Button>
+        </form>
+      </Card>
+
+      <section aria-labelledby="risk-guard-result-heading" aria-live="polite">
+        <h2 id="risk-guard-result-heading" className="sr-only">
+          Result
+        </h2>
+        <p className="sr-only">{announcement}</p>
+        {result === null ? (
+          <Card>
+            <h3 className="type-subtitle">Your result will appear here</h3>
+            <p className="type-helper mt-1.5 text-ink-muted">
+              Enter your capital, risk %, direction, entry, stop and lot size, then calculate. The
+              tool checks the trade against your own risk budget — it never recommends what to buy
+              or sell.
+            </p>
+          </Card>
+        ) : result.status === "allowed" ? (
+          <Card>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Badge tone="ok">Within your risk budget</Badge>
+              <span className="type-caption text-ink-muted">RG-001</span>
+            </div>
+            <h3 className="type-subtitle mt-4">Allowed quantity</h3>
+            <p className="type-metric tnum mt-1">
+              {formatCount(result.quantity)}{" "}
+              <span className="type-helper text-ink-muted">
+                units · {formatCount(result.lots)} {result.lots === 1 ? "lot" : "lots"}
+              </span>
+            </p>
+            <dl className="mt-4 divide-y divide-line border-t border-line">
+              <ReceiptRow term="Risk budget" value={formatPaise(result.riskBudgetPaise)} />
+              <ReceiptRow term="Per-unit risk" value={formatPaise(result.riskPerUnitPaise)} />
+              <ReceiptRow term="Used risk" value={formatPaise(result.usedRiskPaise)} />
+              <ReceiptRow term="Unused budget" value={formatPaise(result.unusedRiskPaise)} />
+              {result.riskRewardRatio !== null && result.rewardPerUnitPaise !== null ? (
+                <ReceiptRow
+                  term="Reward : risk"
+                  value={`${result.riskRewardRatio.toFixed(2)} : 1 (${formatPaise(result.rewardPerUnitPaise)} per unit)`}
+                />
+              ) : null}
+            </dl>
+            <details className="mt-4 rounded-lg border border-line bg-surface-muted/50 px-4 py-2">
+              <summary className="type-label inline-flex min-h-11 cursor-pointer items-center text-ink">
+                Calculation receipt · RG-001
+              </summary>
+              <dl className="divide-y divide-line border-t border-line pb-2">
+                <ReceiptRow
+                  term="Capital"
+                  value={formatPaise(result.inputs.capitalPaise)}
+                />
+                <ReceiptRow
+                  term="Risk"
+                  value={`${(result.inputs.riskBps / 100).toFixed(2)}%`}
+                />
+                <ReceiptRow term="Direction" value={result.inputs.direction} />
+                <ReceiptRow term="Entry" value={formatPaise(result.inputs.entryPaise)} />
+                <ReceiptRow term="Stop-loss" value={formatPaise(result.inputs.stopPaise)} />
+                <ReceiptRow term="Lot size" value={formatCount(result.inputs.lotSize)} />
+                {result.inputs.targetPaise !== undefined ? (
+                  <ReceiptRow term="Target" value={formatPaise(result.inputs.targetPaise)} />
+                ) : null}
+                <ReceiptRow
+                  term="Maximum before lot flooring"
+                  value={formatCount(result.maxQuantity)}
+                />
+                <ReceiptRow term="Rounding" value={result.rounding} />
+              </dl>
+              <p className="type-caption pb-2 text-ink-muted">
+                Charges and slippage are excluded. Verify with your broker. Not investment advice.
+              </p>
+            </details>
+          </Card>
+        ) : (
+          <Card>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Badge tone="danger">Trade blocked</Badge>
+              <span className="type-caption text-ink-muted">RG-001</span>
+            </div>
+            <p className="type-body mt-3">{result.reason}</p>
+            <BlockedDetails result={result} />
+            <details className="mt-4 rounded-lg border border-line bg-surface-muted/50 px-4 py-2">
+              <summary className="type-label inline-flex min-h-11 cursor-pointer items-center text-ink">
+                Calculation receipt · RG-001
+              </summary>
+              <dl className="divide-y divide-line border-t border-line pb-2">
+                <ReceiptRow
+                  term="Capital"
+                  value={formatPaise(result.inputs.capitalPaise)}
+                />
+                <ReceiptRow
+                  term="Risk"
+                  value={`${(result.inputs.riskBps / 100).toFixed(2)}%`}
+                />
+                <ReceiptRow term="Direction" value={result.inputs.direction} />
+                <ReceiptRow term="Entry" value={formatPaise(result.inputs.entryPaise)} />
+                <ReceiptRow term="Stop-loss" value={formatPaise(result.inputs.stopPaise)} />
+                <ReceiptRow term="Lot size" value={formatCount(result.inputs.lotSize)} />
+                <ReceiptRow term="Rounding" value={result.rounding} />
+              </dl>
+              <p className="type-caption pb-2 text-ink-muted">
+                Charges and slippage are excluded. Verify with your broker. Not investment advice.
+              </p>
+            </details>
+          </Card>
+        )}
+        <Callout title="Understand your trade before taking it" className="mt-6">
+          RiskGuard calculates the consequences of the numbers you enter. It does not predict profit,
+          guarantee safety, or recommend trades.
+        </Callout>
+      </section>
+    </div>
+  );
+}

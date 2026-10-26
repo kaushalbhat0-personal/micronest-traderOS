@@ -56,7 +56,7 @@ export const TOOLS = [
     name: "RiskGuard",
     summary: "Size a trade against your capital, stop distance and daily risk budget.",
     group: "plan-risk",
-    status: "coming_soon",
+    status: "live",
   },
   {
     id: "trade-plan",

@@ -1,6 +1,6 @@
 # features/
 
-One folder per tool. Nothing is implemented here in Phase 0.
+One folder per tool. RiskGuard (`risk-guard/`) shipped in Phase 2; the rest are placeholders.
 
 ```
 features/

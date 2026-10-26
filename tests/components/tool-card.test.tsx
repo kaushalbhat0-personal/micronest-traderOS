@@ -22,7 +22,7 @@ describe("ToolCard", () => {
   it("states the current status in words", () => {
     render(<ToolCard tool={riskGuard} />);
 
-    expect(screen.getByText("Coming soon")).toBeInTheDocument();
+    expect(screen.getByText("Live")).toBeInTheDocument();
   });
 
   it("never presents a planned tool as available", () => {
