@@ -3,7 +3,8 @@
 **MicroNest Trader OS** — a lightweight, mobile-first decision-support toolkit for Indian
 retail traders.
 
-**Phase:** 0 — Foundation (27 October 2026). No trading tool is implemented yet.
+**Phase:** 1 — Design System + Product Shell (27 October 2026). No trading tool logic is
+implemented yet.
 
 ---
 
@@ -66,7 +67,8 @@ public/                  static assets
 ```
 
 `src/` is intentionally not used. Root-level folders match the project decision recorded in
-[ADR-001](decisions/ADR-001-scaffold.md).
+[ADR-001](decisions/ADR-001-scaffold.md). What belongs in each file is governed by
+[§13 Source of truth and file organization](#13-source-of-truth-and-file-organization).
 
 ---
 
@@ -101,7 +103,7 @@ Rules:
   headings, disclaimers and static content stay on the server.
 - Calculation engines must be pure TypeScript with no React, browser, clock, or network imports.
   They can run on either side and are tested directly.
-- `app/error.tsx` is the only Client Component in Phase 0, because error boundaries require it.
+- `app/error.tsx` is the only Client Component in Phase 1, because error boundaries require it.
 - No secrets are read in client code. Only `NEXT_PUBLIC_*` values may cross the boundary.
 
 ---
@@ -225,12 +227,106 @@ any UI is written.
 
 ## 12. Deployment
 
-Vercel-compatible, zero custom server. No deployment automation is configured in Phase 0 beyond
+Vercel-compatible, zero custom server. No deployment automation is configured in Phase 1 beyond
 CI verification. No environment variables are required to build.
 
 ---
 
-## 13. Decision log
+## 13. Source of truth and file organization
+
+This is a permanent rule for every phase, not a description of Phase 1.
+
+### 13.1 One source of truth per decision
+
+| Decision                              | Source of truth                                | Consumers                                 |
+| ------------------------------------- | ---------------------------------------------- | ----------------------------------------- |
+| Tool list, groups, statuses           | `config/tools.ts`                              | landing page, `/tools`, `ToolCard`, tests |
+| Prices, entitlements, founding cohort | `config/plans.ts`                              | `/pricing`, tests                         |
+| Partner commission economics          | `config/partner.ts`                            | tests, future billing                     |
+| Colour, spacing, radius, focus tokens | `app/globals.css` — `:root` + `@theme inline`  | every component                           |
+| Type hierarchy                        | `app/globals.css` — `@utility type-*` / `tnum` | every component                           |
+| Tool icon identity                    | `components/ui/tool-card.tsx`                  | tool cards                                |
+| Status → label, tone, icon            | `components/ui/status-badge.tsx`               | tool cards, future tool pages             |
+
+A page may _present_ these decisions; it must never restate them. Counts, names, prices and
+statuses are derived at render time through `statusCounts()`, `toolsInGroup()` and `getPrice()`.
+Adding a tool without an icon is a type error, because the icon map is keyed by the derived
+`ToolId` union.
+
+Presentation detail belongs with presentation: tool icons live in the card component, not in
+`config/tools.ts`, because an icon is a visual decision and the registry is a product decision.
+
+### 13.2 Main file first
+
+Each tool keeps its logic in one main domain file:
+
+```text
+features/risk-guard/
+  risk-guard.ts        ← domain logic, the single source of truth
+  validation.ts        ← input boundary
+  components/
+    risk-guard-form.tsx
+    risk-guard-results.tsx
+```
+
+Do **not** split one calculation into `calculate-risk.ts`, `calculate-lots.ts`,
+`calculate-reward.ts`, … merely because the functions are conceptually separate. Split only when:
+
+1. the file has become genuinely hard to read,
+2. the responsibility is independent,
+3. a real second consumer exists,
+4. the split improves maintainability.
+
+Supporting files present, adapt, validate, compose, format or test the main file. They never
+duplicate its logic.
+
+### 13.3 No speculative abstraction
+
+An abstraction needs a real consumer. Phase 1 therefore has no `EmptyState` or `Field` primitive:
+nothing renders one yet. They are introduced by the first tool that needs them, not in advance.
+Speculative hooks, contexts, generic tool frameworks and generic calculation frameworks are out of
+scope by default.
+
+### 13.4 Design system first
+
+The dependency direction for visual decisions is:
+
+```text
+token (globals.css) → primitive (components/ui) → composed component → page
+```
+
+A page does not invent arbitrary values when a token or primitive expresses the same thing. A
+pattern is promoted into the design system on its second genuine use, and only when the semantics
+match — two similar-looking elements with different meanings stay separate.
+
+### 13.5 Feature-oriented organization
+
+Folders follow the product, not the framework:
+
+- `features/<tool>/` owns a tool's engine and its UI.
+- `config/` owns product decisions: tools, plans, partner economics.
+- `components/ui/` owns reusable presentation with no product knowledge.
+- `components/layout/` owns the shell: container, header, footer, page header.
+- `lib/` owns pure helpers and formatting.
+- `types/` owns shared domain primitives.
+
+SOLID, DRY, KISS and YAGNI are applied against this layout: dependencies point inward, and no
+feature reaches sideways into another feature.
+
+### 13.6 Questions to answer before adding a file
+
+1. Does this file have one real responsibility?
+2. Is this logic already present somewhere else?
+3. Could the logic stay in the source-of-truth file?
+4. Is the abstraction used by more than one meaningful consumer?
+5. Does it add indirection without removing complexity?
+6. Does it follow the dependency direction in §4?
+
+If the answer to (1), (3) or (6) is no, or the answer to (2) is yes, do not add the file.
+
+---
+
+## 14. Decision log
 
 - [ADR-001 — Phase 0 scaffold](decisions/ADR-001-scaffold.md)
 - [Product principles](product-principles.md)

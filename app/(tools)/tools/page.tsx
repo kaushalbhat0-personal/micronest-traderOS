@@ -4,7 +4,7 @@ import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import { ToolGrid } from "@/components/tools/tool-grid";
 import { Callout } from "@/components/ui/callout";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { TOOL_GROUPS } from "@/config/tools";
 
 export const metadata: Metadata = {
   title: "Tools",
@@ -12,29 +12,29 @@ export const metadata: Metadata = {
     "Ten focused microtools for planning, sizing, analysing and reviewing trades. Statuses show what is actually available.",
 };
 
-const LEGEND = [
-  { status: "live", label: "Available now" },
-  { status: "coming_soon", label: "In development" },
-  { status: "planned", label: "Planned" },
-] as const;
+const JUMP_LINK_CLASS =
+  "type-label inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-ink transition-colors hover:bg-surface-muted";
 
 export default function ToolsPage() {
   return (
-    <Container className="py-10 sm:py-12">
+    <Container className="py-10 sm:py-14">
       <PageHeader
         eyebrow="Toolkit"
         title="Tools"
         description="Ten focused tools, grouped by the job they do. Nothing is live yet; RiskGuard is the first tool in development."
       />
 
-      <ul className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-muted">
-        {LEGEND.map((item) => (
-          <li key={item.status} className="flex items-center gap-2">
-            <StatusBadge status={item.status} />
-            <span>{item.label}</span>
-          </li>
-        ))}
-      </ul>
+      <nav aria-label="Tool groups" className="mt-7">
+        <ul className="flex flex-wrap gap-2">
+          {TOOL_GROUPS.map((group) => (
+            <li key={group.id}>
+              <a href={`#group-${group.id}`} className={JUMP_LINK_CLASS}>
+                {group.name}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
 
       <div className="mt-10">
         <ToolGrid />

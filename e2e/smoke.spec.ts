@@ -7,6 +7,21 @@ const PAGES = [
   { path: "/disclaimer", heading: "Disclaimer" },
 ] as const;
 
+const TOOL_NAMES = [
+  "RiskGuard",
+  "TradePlan",
+  "TradeCost",
+  "StrikeLens",
+  "GreekMap",
+  "OI Mapper",
+  "StructureMap",
+  "SetupScore",
+  "LeakDetector",
+  "ReviewOS",
+] as const;
+
+const GROUP_NAMES = ["Plan & Risk", "Options", "Structure & Setup", "Behaviour & Review"] as const;
+
 for (const { path, heading } of PAGES) {
   test(`${path} renders with one h1 and no console errors`, async ({ page }) => {
     const errors: string[] = [];
@@ -28,41 +43,67 @@ for (const { path, heading } of PAGES) {
   });
 }
 
-test("landing page lists all ten tools with honest statuses", async ({ page }) => {
+test("landing page introduces the problem, the toolkit and the philosophy", async ({ page }) => {
   await page.goto("/");
 
-  const toolNames = [
-    "RiskGuard",
-    "TradePlan",
-    "TradeCost",
-    "StrikeLens",
-    "GreekMap",
-    "OI Mapper",
-    "StructureMap",
-    "SetupScore",
-    "LeakDetector",
-    "ReviewOS",
-  ];
+  for (const name of GROUP_NAMES) {
+    await expect(page.getByRole("heading", { level: 3, name })).toBeVisible();
+  }
 
-  for (const name of toolNames) {
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Direction is the easy part" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Calculations and structure, not signals." }),
+  ).toBeVisible();
+
+  const statusLine = page.getByText(/10 tools/);
+  await expect(statusLine).toContainText("9 planned");
+  await expect(statusLine).toContainText("none live yet");
+
+  await expect(page.getByRole("link", { name: "Browse all tools" })).toHaveAttribute(
+    "href",
+    "/tools",
+  );
+});
+
+test("tools index lists all ten tools with honest statuses", async ({ page }) => {
+  await page.goto("/tools");
+
+  for (const name of TOOL_NAMES) {
     await expect(page.getByRole("heading", { level: 3, name })).toBeVisible();
   }
 
   await expect(page.getByText("Coming soon")).toHaveCount(1);
+  await expect(page.getByText("Planned")).toHaveCount(9);
   await expect(page.getByText("Live", { exact: true })).toHaveCount(0);
 });
 
-test("pricing page renders prices from configuration and no working checkout", async ({ page }) => {
+test("tool group links resolve to rendered sections", async ({ page }) => {
+  await page.goto("/tools");
+
+  const links = page.getByRole("navigation", { name: "Tool groups" }).getByRole("link");
+  await expect(links).toHaveCount(GROUP_NAMES.length);
+
+  const ids = await links.evaluateAll((elements) =>
+    elements.map((element) => (element.getAttribute("href") ?? "").replace("#", "")),
+  );
+
+  for (const id of ids) {
+    expect(id).not.toBe("");
+    await expect(page.locator(`#${id}`)).toBeVisible();
+  }
+});
+
+test("pricing renders every configured price and no working checkout", async ({ page }) => {
   await page.goto("/pricing");
 
-  await expect(page.getByText("₹199", { exact: true })).toBeVisible();
-  await expect(page.getByText("₹1,999", { exact: true })).toBeVisible();
-  await expect(page.getByText("₹599", { exact: true })).toBeVisible();
-  await expect(page.getByText("₹4,999", { exact: true })).toBeVisible();
-  await expect(page.getByText("₹399", { exact: true })).toBeVisible();
-  await expect(page.getByText("₹3,999", { exact: true })).toBeVisible();
+  for (const price of ["₹199", "₹1,999", "₹599", "₹4,999", "₹399", "₹3,999"]) {
+    await expect(page.getByText(price, { exact: true })).toBeVisible();
+  }
 
   await expect(page.getByRole("button", { name: "Not yet available" })).toHaveCount(2);
+  await expect(page.getByText("price cohort, not a separate plan")).toBeVisible();
 });
 
 test("skip link moves focus to main content", async ({ page }) => {
@@ -76,6 +117,40 @@ test("skip link moves focus to main content", async ({ page }) => {
   await expect(page.locator("#main-content")).toBeFocused();
 });
 
+test("keyboard focus is visible", async ({ page }) => {
+  await page.goto("/");
+
+  await page.keyboard.press("Tab");
+  const skipLink = page.getByRole("link", { name: "Skip to content" });
+  await expect(skipLink).toBeFocused();
+
+  const outline = await skipLink.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { width: style.outlineWidth, style: style.outlineStyle };
+  });
+
+  expect(outline.style).toBe("solid");
+  expect(Number.parseFloat(outline.width)).toBeGreaterThanOrEqual(2);
+});
+
+test("keyboard order follows the page order", async ({ page }) => {
+  await page.goto("/");
+
+  const expected = [
+    page.getByRole("link", { name: "Skip to content" }),
+    page.getByRole("link", { name: /MicroNest/ }),
+    page.getByRole("link", { name: "Tools", exact: true }).first(),
+    page.getByRole("link", { name: "Pricing", exact: true }).first(),
+    page.getByRole("link", { name: "Disclaimer", exact: true }).first(),
+    page.getByRole("link", { name: "Explore the toolkit" }),
+  ];
+
+  for (const locator of expected) {
+    await page.keyboard.press("Tab");
+    await expect(locator).toBeFocused();
+  }
+});
+
 test("baseline security headers are present", async ({ request }) => {
   const response = await request.get("/");
 
@@ -85,16 +160,22 @@ test("baseline security headers are present", async ({ request }) => {
   expect(response.headers()["x-powered-by"]).toBeUndefined();
 });
 
-test("primary navigation meets the 44px touch-target minimum", async ({ page }) => {
+test("every interactive target meets the 44px minimum at 360px", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.goto("/");
 
-  const heights = await page
-    .locator("header a")
-    .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
+  for (const { path } of PAGES) {
+    await page.goto(path);
 
-  expect(heights.length).toBeGreaterThan(0);
-  expect(Math.min(...heights)).toBeGreaterThanOrEqual(43.5);
+    const undersized = await page
+      .locator("header a, main a, main button, footer a")
+      .evaluateAll((elements) =>
+        elements
+          .filter((element) => element.getBoundingClientRect().height < 43.5)
+          .map((element) => (element.textContent ?? "").trim().slice(0, 40)),
+      );
+
+    expect(undersized, `${path} has undersized targets`).toEqual([]);
+  }
 });
 
 test("respects reduced-motion preferences", async ({ page }) => {

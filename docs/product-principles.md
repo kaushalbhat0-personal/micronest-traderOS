@@ -125,3 +125,29 @@ All tools must clearly separate:
 - [ ] Is every new dependency justified?
 - [ ] Is any new data storage explicit, minimal, and secure?
 - [ ] Is the status label honest (live / coming soon / planned)?
+
+---
+
+## 9. Source of truth / file organization
+
+This is an architecture rule, not a preference. Full detail:
+[architecture.md §13](architecture.md#13-source-of-truth-and-file-organization).
+
+- **One decision, one file.** Tools live in `config/tools.ts`, prices in `config/plans.ts`, partner
+  economics in `config/partner.ts`, visual language in `app/globals.css`. Pages present those
+  decisions; they never restate them.
+- **Main file first.** A tool's logic lives in one domain file. Supporting files validate, present,
+  compose, format or test it — they do not re-implement it. Splitting one calculation into many
+  `calculate-*.ts` files is not "clean architecture".
+- **No speculative abstraction.** A primitive, hook or context arrives with its real consumer, not
+  in anticipation of one.
+- **Design system first.** Token → primitive → composed component → page. No page-level one-off
+  values when a token already expresses the decision.
+- **Feature-oriented.** Code is grouped by the product's jobs — a tool, a plan, the shell — not by
+  framework mechanics.
+- **SOLID, DRY, KISS, YAGNI** applied together: small focused units, no duplicated business logic,
+  the simplest structure that works, and nothing built before it is needed.
+- **Every file justifies itself.** If logic could live in the source-of-truth file, it should.
+
+A change that duplicates a price, a tool status, a status colour or a type scale is rejected in
+review regardless of how it looks.

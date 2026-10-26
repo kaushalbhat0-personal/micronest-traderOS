@@ -1,33 +1,11 @@
 export const TOOL_STATUSES = ["live", "coming_soon", "planned"] as const;
 export type ToolStatus = (typeof TOOL_STATUSES)[number];
 
-export const TOOL_GROUP_IDS = [
-  "plan-risk",
-  "options",
-  "structure-setup",
-  "behaviour-review",
-] as const;
-export type ToolGroupId = (typeof TOOL_GROUP_IDS)[number];
-
-export type ToolGroup = {
-  id: ToolGroupId;
-  name: string;
-  description: string;
-};
-
-export type ToolDefinition = {
-  /** Stable internal identifier. */
-  id: string;
-  /** URL segment reserved for the tool. */
-  slug: string;
-  name: string;
-  /** One-line description of the intended job. Never a functionality claim. */
-  summary: string;
-  group: ToolGroupId;
-  status: ToolStatus;
-};
-
-export const TOOL_GROUPS: readonly ToolGroup[] = [
+/**
+ * Tool groups are the navigation model for the toolkit. Order here is the
+ * order shown on the tools index and the landing page.
+ */
+export const TOOL_GROUPS = [
   {
     id: "plan-risk",
     name: "Plan & Risk",
@@ -48,9 +26,30 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     name: "Behaviour & Review",
     description: "Find leaks and build a repeatable review habit.",
   },
-];
+] as const;
 
-export const TOOLS: readonly ToolDefinition[] = [
+export type ToolGroup = (typeof TOOL_GROUPS)[number];
+export type ToolGroupId = ToolGroup["id"];
+
+/** Shape every tool entry must satisfy. Not exported: `Tool` is the source. */
+type ToolEntry = {
+  /** Stable internal identifier. */
+  id: string;
+  /** URL segment reserved for the tool. */
+  slug: string;
+  name: string;
+  /** One-line description of the intended job. Never a functionality claim. */
+  summary: string;
+  group: ToolGroupId;
+  status: ToolStatus;
+};
+
+/**
+ * Single source of truth for the ten tools. The literal `as const` makes every
+ * `id` a union member, so consumers such as the tool icon map are exhaustive:
+ * adding a tool without an icon is a type error.
+ */
+export const TOOLS = [
   {
     id: "risk-guard",
     slug: "risk-guard",
@@ -131,4 +130,23 @@ export const TOOLS: readonly ToolDefinition[] = [
     group: "behaviour-review",
     status: "planned",
   },
-];
+] as const satisfies readonly ToolEntry[];
+
+export type Tool = (typeof TOOLS)[number];
+export type ToolId = Tool["id"];
+
+/** Tools belonging to a group, in registry order. */
+export function toolsInGroup(groupId: ToolGroupId): Tool[] {
+  return TOOLS.filter((tool) => tool.group === groupId);
+}
+
+/** Live status ledger for the registry, so no page restates the counts. */
+export function statusCounts(): Record<ToolStatus, number> {
+  const counts: Record<ToolStatus, number> = { live: 0, coming_soon: 0, planned: 0 };
+
+  for (const tool of TOOLS) {
+    counts[tool.status] += 1;
+  }
+
+  return counts;
+}

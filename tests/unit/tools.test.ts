@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { TOOL_GROUPS, TOOLS } from "@/config/tools";
+import { TOOL_GROUPS, TOOLS, statusCounts, toolsInGroup, type ToolStatus } from "@/config/tools";
 
 describe("tool registry", () => {
   it("contains the ten planned tools", () => {
@@ -32,8 +32,10 @@ describe("tool registry", () => {
     expect(others.every((tool) => tool.status === "planned")).toBe(true);
   });
 
-  it("does not claim any tool is live in Phase 0", () => {
-    expect(TOOLS.some((tool) => tool.status === "live")).toBe(false);
+  it("claims no live tool yet", () => {
+    const statuses: ToolStatus[] = TOOLS.map((tool) => tool.status);
+
+    expect(statuses).not.toContain("live");
   });
 
   it("assigns every tool to a declared group", () => {
@@ -46,7 +48,23 @@ describe("tool registry", () => {
 
   it("gives every group at least one tool", () => {
     for (const group of TOOL_GROUPS) {
-      expect(TOOLS.some((tool) => tool.group === group.id)).toBe(true);
+      expect(toolsInGroup(group.id).length).toBeGreaterThan(0);
     }
+  });
+
+  it("partitions every tool into exactly one group", () => {
+    const grouped = TOOL_GROUPS.flatMap((group) => toolsInGroup(group.id));
+
+    expect(grouped).toHaveLength(TOOLS.length);
+    expect(new Set(grouped.map((tool) => tool.id)).size).toBe(TOOLS.length);
+  });
+
+  it("reports a status ledger that matches the registry", () => {
+    const counts = statusCounts();
+
+    expect(counts.live).toBe(0);
+    expect(counts.coming_soon).toBe(1);
+    expect(counts.planned).toBe(9);
+    expect(counts.live + counts.coming_soon + counts.planned).toBe(TOOLS.length);
   });
 });

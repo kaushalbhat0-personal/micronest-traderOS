@@ -70,6 +70,9 @@
     text-wrap: pretty;
   }
 
+  /* Single focus treatment for the whole product. The outline is drawn
+     outside the element (offset 2px), so it stays visible on dark primary
+     buttons as well as on light surfaces. */
   :focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
@@ -80,7 +83,89 @@
   }
 }
 
-/* Figures must align in columns: money, quantities, percentages. */
+/*
+ * Type scale — the source of truth for typographic hierarchy.
+ *
+ * Display    hero headline
+ * Title      page headline
+ * Section    section heading (h2)
+ * Subtitle   card / item heading (h3)
+ * Body       prose and lead paragraphs
+ * Label      buttons, labels, terms
+ * Helper     secondary prose
+ * Caption    badges, footnotes, meta
+ * Eyebrow    small uppercase section marker
+ * Metric     financial figures (tabular numerals)
+ *
+ * Sizes are fluid where the hierarchy needs it, so pages never restate
+ * breakpoint variants. Colour is deliberately not part of the scale.
+ */
+@utility type-display {
+  font-size: clamp(2rem, 1.65rem + 1.55vw, 2.75rem);
+  line-height: 1.08;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+@utility type-title {
+  font-size: clamp(1.5rem, 1.4rem + 0.45vw, 1.75rem);
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+@utility type-section {
+  font-size: clamp(1.125rem, 1.07rem + 0.25vw, 1.25rem);
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+@utility type-subtitle {
+  font-size: 1rem;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+@utility type-body {
+  font-size: clamp(1rem, 0.97rem + 0.15vw, 1.0625rem);
+  line-height: 1.65;
+}
+
+@utility type-label {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+@utility type-helper {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+@utility type-caption {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+@utility type-eyebrow {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@utility type-metric {
+  font-size: 1.75rem;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inline figures that are not a headline metric. */
 @utility tnum {
   font-variant-numeric: tabular-nums;
 }

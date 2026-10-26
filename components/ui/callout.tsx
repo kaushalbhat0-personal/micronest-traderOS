@@ -41,9 +41,9 @@ export function Callout({ tone = "info", title, children, className }: CalloutPr
   return (
     <div role="note" className={cn("flex gap-3 rounded-xl border p-4", container, className)}>
       <Icon aria-hidden="true" className={cn("mt-0.5 size-5 shrink-0", iconClassName)} />
-      <div className="min-w-0 space-y-1 text-sm leading-relaxed">
-        {title ? <p className="font-medium text-ink">{title}</p> : null}
-        <div className="text-ink-muted">{children}</div>
+      <div className="min-w-0 space-y-1">
+        {title ? <p className="type-label text-ink">{title}</p> : null}
+        <div className="type-helper text-ink-muted">{children}</div>
       </div>
     </div>
   );

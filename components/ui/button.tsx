@@ -4,17 +4,25 @@ import { cn } from "@/lib/utils";
 export type ButtonVariant = "primary" | "secondary" | "ghost";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-on-primary hover:bg-primary-hover",
-  secondary: "border border-line bg-surface text-ink hover:bg-surface-muted",
-  ghost: "text-primary hover:bg-surface-muted",
+  primary: "bg-primary text-on-primary hover:bg-primary-hover active:bg-primary-hover",
+  secondary:
+    "border border-line bg-surface text-ink hover:bg-surface-muted active:bg-surface-muted",
+  ghost: "text-primary hover:bg-surface-muted active:bg-surface-muted",
 };
 
+/**
+ * Button styling, also used by `<Link>` for navigational actions so links stay
+ * links and buttons stay buttons.
+ *
+ * Focus uses the global `:focus-visible` outline. Disabled buttons switch to a
+ * neutral surface instead of fading, because 60% opacity on the primary colour
+ * drops label contrast below AA.
+ */
 export function buttonClasses(variant: ButtonVariant = "primary", className?: string): string {
   return cn(
-    "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium",
+    "type-label inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2",
     "transition-colors duration-150",
-    "focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-canvas focus-visible:outline-none",
-    "disabled:cursor-not-allowed disabled:opacity-60",
+    "disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-muted",
     VARIANTS[variant],
     className,
   );

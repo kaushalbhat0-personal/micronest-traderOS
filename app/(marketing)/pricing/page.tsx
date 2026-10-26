@@ -3,8 +3,10 @@ import type { Metadata } from "next";
 
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { Card } from "@/components/ui/card";
 import {
   BILLING_INTERVALS,
   FOUNDING_COHORT,
@@ -28,32 +30,27 @@ const INTERVAL_LABEL: Record<BillingInterval, { label: string; suffix: string }>
   year: { label: "Yearly", suffix: "per year" },
 };
 
-function PriceRows({ planId }: { planId: PlanId }) {
+/** Monthly is the headline figure; the yearly option stays visible beside it. */
+function PlanPrice({ planId }: { planId: PlanId }) {
+  const monthly = getPrice(planId, "month");
+  const yearly = getPrice(planId, "year");
+
+  if (!monthly || !yearly) {
+    return null;
+  }
+
   return (
-    <dl className="space-y-2">
-      {BILLING_INTERVALS.map((interval) => {
-        const price = getPrice(planId, interval);
-
-        if (!price) {
-          return null;
-        }
-
-        return (
-          <div
-            key={interval}
-            className="flex items-baseline justify-between gap-3 border-t border-line pt-2 first:border-t-0 first:pt-0"
-          >
-            <dt className="text-sm text-ink-muted">{INTERVAL_LABEL[interval].label}</dt>
-            <dd className="text-right">
-              <span className="tnum text-base font-semibold">
-                {formatInrFromPaise(price.amountPaise)}
-              </span>
-              <span className="ml-1 text-xs text-ink-muted">{INTERVAL_LABEL[interval].suffix}</span>
-            </dd>
-          </div>
-        );
-      })}
-    </dl>
+    <div className="space-y-1 border-t border-line pt-4">
+      <p className="flex flex-wrap items-baseline gap-x-2">
+        <span className="type-metric">{formatInrFromPaise(monthly.amountPaise)}</span>
+        <span className="type-caption text-ink-muted">{INTERVAL_LABEL.month.suffix}</span>
+      </p>
+      <p className="type-helper text-ink-muted">
+        or{" "}
+        <span className="tnum font-medium text-ink">{formatInrFromPaise(yearly.amountPaise)}</span>{" "}
+        {INTERVAL_LABEL.year.suffix}
+      </p>
+    </div>
   );
 }
 
@@ -62,41 +59,38 @@ function PlanCard({ planId }: { planId: PlanId }) {
   const isFree = plan.id === "free";
 
   return (
-    <article
+    <Card
+      as="article"
       aria-labelledby={`plan-${plan.id}`}
-      className={cn(
-        "flex h-full flex-col rounded-xl border bg-surface p-5",
-        plan.highlighted ? "border-primary/30" : "border-line",
-      )}
+      className={cn("flex h-full flex-col", plan.highlighted && "border-primary/30")}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 id={`plan-${plan.id}`} className="text-lg font-semibold tracking-tight">
-            {plan.name}
-          </h2>
-          <p className="mt-1 text-sm leading-relaxed text-ink-muted">{plan.tagline}</p>
-        </div>
-        {plan.highlighted ? (
-          <span className="shrink-0 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary">
-            Most complete
-          </span>
-        ) : null}
+      {/* The name row wraps instead of squeezing the heading, so a long plan
+          name never collapses into a narrow column at three-across widths. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h2 id={`plan-${plan.id}`} className="type-section">
+          {plan.name}
+        </h2>
+        {plan.highlighted ? <Badge tone="primary">Most complete</Badge> : null}
       </div>
 
-      <div className="mt-5">
+      {/* Price sits directly under the name so the comparison figure lines up
+          across plans; the tagline follows, where its length cannot shift it. */}
+      <div className="mt-4">
         {isFree ? (
-          <div className="flex items-baseline justify-between border-t border-line pt-3">
-            <span className="text-sm text-ink-muted">Price</span>
-            <span className="text-base font-semibold">Free</span>
+          <div className="flex flex-wrap items-baseline gap-x-2 border-t border-line pt-4">
+            <span className="type-metric">{formatInrFromPaise(0)}</span>
+            <span className="type-caption text-ink-muted">no card required at launch</span>
           </div>
         ) : (
-          <PriceRows planId={plan.id} />
+          <PlanPrice planId={plan.id} />
         )}
       </div>
 
-      <ul className="mt-5 space-y-2 text-sm">
+      <p className="type-helper mt-3 text-ink-muted">{plan.tagline}</p>
+
+      <ul className="mt-5 space-y-2">
         {plan.features.map((feature) => (
-          <li key={feature} className="flex gap-2">
+          <li key={feature} className="type-helper flex gap-2">
             <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ok" />
             <span>{feature}</span>
           </li>
@@ -105,25 +99,28 @@ function PlanCard({ planId }: { planId: PlanId }) {
 
       <div className="mt-auto pt-6">
         {isFree ? (
-          <p className="text-xs text-ink-muted">Available when the first tool opens.</p>
+          <p className="type-caption text-ink-muted">Available when the first tool opens.</p>
         ) : (
           <>
             <Button disabled className="w-full" aria-describedby={`plan-${plan.id}-status`}>
               Not yet available
             </Button>
-            <p id={`plan-${plan.id}-status`} className="mt-2 text-center text-xs text-ink-muted">
+            <p
+              id={`plan-${plan.id}-status`}
+              className="type-caption mt-2 text-center text-ink-muted"
+            >
               Checkout opens at launch.
             </p>
           </>
         )}
       </div>
-    </article>
+    </Card>
   );
 }
 
 export default function PricingPage() {
   return (
-    <Container className="py-10 sm:py-12">
+    <Container className="py-10 sm:py-14">
       <PageHeader
         eyebrow="Plans"
         title="Pricing"
@@ -136,35 +133,28 @@ export default function PricingPage() {
         ))}
       </div>
 
-      <section
-        aria-labelledby="founding"
-        className="mt-8 rounded-xl border border-primary/25 bg-surface p-5 sm:p-6"
-      >
+      <Card as="section" aria-labelledby="founding" className="mt-4 border-primary/25 sm:p-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 id="founding" className="text-lg font-semibold tracking-tight">
+          <h2 id="founding" className="type-section">
             {FOUNDING_COHORT.name}
           </h2>
-          <span className="rounded-full border border-warn/30 bg-warn/10 px-2.5 py-1 text-xs font-medium text-warn-strong">
-            First {FOUNDING_COHORT.seats} customers
-          </span>
+          <Badge>First {FOUNDING_COHORT.seats} customers</Badge>
         </div>
 
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          {FOUNDING_COHORT.description}
-        </p>
+        <p className="type-helper mt-2 max-w-2xl text-ink-muted">{FOUNDING_COHORT.description}</p>
 
-        <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <dl className="mt-5 flex flex-col gap-4 border-t border-line pt-4 sm:flex-row sm:gap-16">
           {BILLING_INTERVALS.map((interval) => {
             const price = getPrice(FOUNDING_COHORT.entitlementPlanId, interval, FOUNDING_COHORT.id);
 
             return (
-              <div key={interval} className="rounded-lg border border-line bg-surface-muted p-3">
-                <dt className="text-xs text-ink-muted">{INTERVAL_LABEL[interval].label}</dt>
-                <dd className="mt-1">
-                  <span className="tnum text-lg font-semibold">
+              <div key={interval}>
+                <dt className="type-caption text-ink-muted">{INTERVAL_LABEL[interval].label}</dt>
+                <dd className="mt-1 flex flex-wrap items-baseline gap-x-2">
+                  <span className="type-metric">
                     {price ? formatInrFromPaise(price.amountPaise) : "—"}
                   </span>
-                  <span className="ml-1 text-xs text-ink-muted">
+                  <span className="type-caption text-ink-muted">
                     {INTERVAL_LABEL[interval].suffix}
                   </span>
                 </dd>
@@ -173,11 +163,11 @@ export default function PricingPage() {
           })}
         </dl>
 
-        <p className="mt-3 text-xs text-ink-muted">
+        <p className="type-caption mt-4 text-ink-muted">
           Same entitlements as {PLANS[FOUNDING_COHORT.entitlementPlanId].name}. Founding pricing is
           a price cohort, not a separate plan.
         </p>
-      </section>
+      </Card>
 
       <Callout title="Before launch" className="mt-8">
         Prices are shown in INR for planning. Checkout, applicable taxes and payment processing will

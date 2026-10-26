@@ -1,8 +1,17 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+/**
+ * Surface primitive. `as` exists because pricing renders plan cards as
+ * `<article>` (a self-contained offer) and the founding band as `<section>`
+ * (a labelled region), while tool cards are plain boxes.
+ */
+export function Card({
+  as: Tag = "div",
+  className,
+  ...props
+}: HTMLAttributes<HTMLElement> & { as?: "div" | "article" | "section" }) {
   return (
-    <div className={cn("rounded-xl border border-line bg-surface p-5", className)} {...props} />
+    <Tag className={cn("rounded-xl border border-line bg-surface p-5", className)} {...props} />
   );
 }
