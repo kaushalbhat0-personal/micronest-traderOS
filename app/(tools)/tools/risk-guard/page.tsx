@@ -4,6 +4,7 @@ import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import { Callout } from "@/components/ui/callout";
 import { RiskGuardCalculator } from "@/features/risk-guard/components/risk-guard-calculator";
+import { parseHandoffParams } from "@/features/risk-guard/validation";
 
 export const metadata: Metadata = {
   title: "RiskGuard",
@@ -11,7 +12,15 @@ export const metadata: Metadata = {
     "Check a trade against your own risk budget: allowed quantity, per-unit risk and a transparent calculation receipt. No broker login or market data needed.",
 };
 
-export default function RiskGuardPage() {
+export default async function RiskGuardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Ephemeral handoff from TradePlan: only direction/entry/stop/target are
+  // accepted, each re-validated at the RiskGuard boundary. Nothing is stored.
+  const handoff = parseHandoffParams((await searchParams) ?? {});
+
   return (
     <Container className="py-10 sm:py-14">
       <PageHeader
@@ -21,7 +30,7 @@ export default function RiskGuardPage() {
       />
 
       <div className="mt-8">
-        <RiskGuardCalculator />
+        <RiskGuardCalculator initialFields={handoff} />
       </div>
 
       <Callout title="Scope" className="mt-10">

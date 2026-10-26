@@ -14,6 +14,7 @@ import {
 import {
   riskGuardFieldsSchema,
   toRiskGuardInput,
+  type RiskGuardHandoffFields,
   type RiskGuardRawFields,
 } from "@/features/risk-guard/validation";
 
@@ -108,11 +109,21 @@ function BlockedDetails({ result }: { result: RiskGuardBlocked }) {
   );
 }
 
-export function RiskGuardCalculator() {
-  const [fields, setFields] = useState<RiskGuardRawFields>(EMPTY_FIELDS);
+export function RiskGuardCalculator({
+  initialFields = {},
+}: {
+  /** Best-effort prefill from a TradePlan handoff. Always editable, never trusted. */
+  initialFields?: RiskGuardHandoffFields;
+}) {
+  const [fields, setFields] = useState<RiskGuardRawFields>({ ...EMPTY_FIELDS, ...initialFields });
   const [errors, setErrors] = useState<Partial<Record<keyof RiskGuardRawFields, string>>>({});
   const [result, setResult] = useState<RiskGuardResult | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const hasHandoff =
+    initialFields.direction !== undefined ||
+    initialFields.entry !== undefined ||
+    initialFields.stop !== undefined ||
+    initialFields.target !== undefined;
 
   function setField(name: keyof RiskGuardRawFields, value: string) {
     setFields((prev) => ({ ...prev, [name]: value }));
@@ -151,6 +162,15 @@ export function RiskGuardCalculator() {
         <h2 id="risk-guard-inputs-heading" className="type-section">
           Your inputs
         </h2>
+        {hasHandoff ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge tone="neutral">From your TradePlan</Badge>
+            <p className="type-caption text-ink-muted">
+              Carried forward for you — review or change anything. RiskGuard calculates from what
+              is in this form.
+            </p>
+          </div>
+        ) : null}
         <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-6">
           <fieldset className="space-y-4">
             <legend className="type-eyebrow text-ink-muted">Risk budget</legend>

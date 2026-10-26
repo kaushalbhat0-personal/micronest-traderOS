@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
 import {
@@ -138,6 +138,19 @@ export function TradePlanChecker() {
 
   const describe = (id: string, hint: boolean, hasError: boolean) =>
     hasError ? `${id}-error` : hint ? `${id}-hint` : undefined;
+
+  // Ephemeral handoff: only direction/entry/stop/optional-target travel, as
+  // plain query values. RiskGuard re-validates everything on arrival; no
+  // narrative text (setup, thesis, invalidation, notes) ever enters the URL.
+  function handoffHref(): string {
+    const params = new URLSearchParams({
+      direction: fields.direction,
+      entry: fields.entry.trim(),
+      stop: fields.stop.trim(),
+    });
+    if (fields.target.trim() !== "") params.set("target", fields.target.trim());
+    return `/tools/risk-guard?${params.toString()}`;
+  }
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -400,6 +413,17 @@ export function TradePlanChecker() {
                 ? ", the target sits on the profit side, and the arithmetic above follows."
                 : ", and the arithmetic above follows. No target was given, so no R:R is calculated."}
             </p>
+            <h3 className="type-subtitle mt-5">Next decision</h3>
+            <p className="type-helper mt-1.5 text-ink-muted">
+              A coherent plan is not automatically a responsibly sized one. RiskGuard will now
+              check how much you can take under your own risk constraint.
+            </p>
+            <a
+              href={handoffHref()}
+              className={buttonClasses("primary", "mt-3 w-full sm:w-auto")}
+            >
+              Size this trade in RiskGuard
+            </a>
             <details className="mt-4 rounded-lg border border-line bg-surface-muted/50 px-4 py-2">
               <summary className="type-label inline-flex min-h-11 cursor-pointer items-center text-ink">
                 05 · Plan receipt · TP-001

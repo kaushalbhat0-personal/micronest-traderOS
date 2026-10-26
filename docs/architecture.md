@@ -324,6 +324,21 @@ feature reaches sideways into another feature.
 
 If the answer to (1), (3) or (6) is no, or the answer to (2) is yes, do not add the file.
 
+### 13.7 Connected tools (input handoff, not shared logic)
+
+Tools stay independent. When one tool continues into another, the handoff carries **inputs
+only** — never duplicated calculations:
+
+- TradePlan → RiskGuard: `direction`, `entry`, `stop`, optional `target`, as plain URL query
+  values. No setup text, thesis, invalidation or notes ever enter the URL.
+- RiskGuard re-validates every carried value at its own boundary
+  (`parseHandoffParams` in `features/risk-guard/validation.ts`); invalid values are dropped,
+  and the Zod schema still governs on submit.
+- Prefilled values render as normal editable form fields. RiskGuard always calculates from
+  what is in its own form.
+- The handoff is ephemeral: no storage, no global state, no shared kernel. Each domain file
+  remains the sole source of truth for its own calculation (TP-001 vs RG-001).
+
 ---
 
 ## 14. Decision log

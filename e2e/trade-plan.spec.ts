@@ -35,7 +35,7 @@ test("TradePlan accepts a coherent plan and shows a receipt", async ({ page }) =
   await fillPlan(page, VALID);
   await page.getByRole("button", { name: "Check my plan" }).click();
 
-  await expect(page.getByText("Coherent plan")).toBeVisible();
+  await expect(page.getByText("Coherent plan", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "03 · Risk / reward" })).toBeVisible();
   await expect(page.locator("p.type-metric")).toContainText("2.00");
 

@@ -8,7 +8,11 @@ import {
   parseRupeesToPaise,
   type RiskGuardInput,
 } from "@/features/risk-guard/risk-guard";
-import { riskGuardFieldsSchema, toRiskGuardInput } from "@/features/risk-guard/validation";
+import {
+  riskGuardFieldsSchema,
+  toRiskGuardInput,
+  parseHandoffParams,
+} from "@/features/risk-guard/validation";
 
 function input(overrides: Partial<RiskGuardInput> = {}): RiskGuardInput {
   return {
@@ -387,5 +391,43 @@ describe("riskGuardFieldsSchema (input boundary)", () => {
     );
     expect(riskGuardFieldsSchema.safeParse({ ...valid, lotSize: "0" }).success).toBe(false);
     expect(riskGuardFieldsSchema.safeParse({ ...valid, lotSize: "7.5" }).success).toBe(false);
+  });
+});
+
+describe("parseHandoffParams (TradePlan handoff boundary)", () => {
+  it("accepts a complete valid handoff", () => {
+    expect(
+      parseHandoffParams({ direction: "long", entry: "100", stop: "95", target: "110" }),
+    ).toEqual({ direction: "long", entry: "100", stop: "95", target: "110" });
+  });
+
+  it("accepts a handoff without the optional target", () => {
+    expect(parseHandoffParams({ direction: "short", entry: "200", stop: "210" })).toEqual({
+      direction: "short",
+      entry: "200",
+      stop: "210",
+    });
+  });
+
+  it("drops malformed values instead of trusting them", () => {
+    expect(
+      parseHandoffParams({ direction: "sideways", entry: "abc", stop: "95.123", target: "" }),
+    ).toEqual({});
+  });
+
+  it("drops out-of-range values and ignores unknown keys", () => {
+    expect(
+      parseHandoffParams({
+        direction: "long",
+        entry: "0",
+        stop: "99999999999999",
+        thesis: "breakout",
+        setupName: "x",
+      }),
+    ).toEqual({ direction: "long" });
+  });
+
+  it("takes the first value when a key repeats", () => {
+    expect(parseHandoffParams({ entry: ["100", "999"] })).toEqual({ entry: "100" });
   });
 });

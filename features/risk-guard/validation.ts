@@ -86,6 +86,40 @@ export type RiskGuardRawFields = {
 /** Validated integer domain input, ready for the engine. */
 export type RiskGuardParsedFields = z.output<typeof riskGuardFieldsSchema>;
 
+/**
+ * Prefilled values carried from a TradePlan handoff. A subset of the raw
+ * fields: only non-sensitive numeric/enumerated inputs ever travel in the URL.
+ */
+export type RiskGuardHandoffFields = Partial<
+  Pick<RiskGuardRawFields, "direction" | "entry" | "stop" | "target">
+>;
+
+/**
+ * Best-effort handoff parser for RiskGuard's own input boundary. Each query
+ * value is re-validated with the same parsers and ranges as the form; invalid
+ * or absent values are omitted, never trusted. Unknown keys are ignored, so a
+ * hand-edited URL cannot smuggle anything past the Zod schema on submit.
+ */
+export function parseHandoffParams(
+  params: Record<string, string | string[] | undefined>,
+): RiskGuardHandoffFields {
+  const first = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
+
+  const handoff: RiskGuardHandoffFields = {};
+  const direction = first(params.direction);
+  if (direction === "long" || direction === "short") handoff.direction = direction;
+
+  for (const key of ["entry", "stop", "target"] as const) {
+    const raw = first(params[key])?.trim() ?? "";
+    if (raw === "") continue;
+    const paise = parseRupeesToPaise(raw);
+    if (paise !== null && paise > 0 && paise <= MAX_PAISE) handoff[key] = raw;
+  }
+
+  return handoff;
+}
+
 export function toRiskGuardInput(parsed: RiskGuardParsedFields): RiskGuardInput {
   return {
     capitalPaise: parsed.capital,
