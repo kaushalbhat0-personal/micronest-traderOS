@@ -338,6 +338,8 @@ only** — never duplicated calculations:
   what is in its own form.
 - The handoff is ephemeral: no storage, no global state, no shared kernel. Each domain file
   remains the sole source of truth for its own calculation (TP-001 vs RG-001).
+- The post-sizing decision comparison is presentation only: it juxtaposes frozen plan-origin
+  values against the authoritative sizing result and computes nothing new.
 
 ---
 

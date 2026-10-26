@@ -8,6 +8,7 @@ import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
 import {
   decidePosition,
+  parseRupeesToPaise,
   type RiskGuardBlocked,
   type RiskGuardResult,
 } from "@/features/risk-guard/risk-guard";
@@ -106,6 +107,80 @@ function BlockedDetails({ result }: { result: RiskGuardBlocked }) {
       ) : null}
       <ReceiptRow term="Maximum affordable quantity" value={formatCount(result.maxQuantity)} />
     </dl>
+  );
+}
+
+/** Display a carried handoff string as money. Handoff values are pre-validated; stay total. */
+function formatPlanPaise(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  const paise = parseRupeesToPaise(raw);
+  return paise === null ? raw : formatPaise(paise);
+}
+
+/**
+ * Plan-origin values, frozen at handoff time. Read from the initial prop —
+ * never from live form state — so an edited value is never mislabelled as
+ * the original plan.
+ */
+function PlanOriginDetails({ handoff }: { handoff: RiskGuardHandoffFields }) {
+  const entry = formatPlanPaise(handoff.entry);
+  const stop = formatPlanPaise(handoff.stop);
+  const target = formatPlanPaise(handoff.target);
+  return (
+    <dl className="divide-y divide-line border-t border-line">
+      {handoff.direction !== undefined ? (
+        <ReceiptRow term="Plan direction" value={handoff.direction} />
+      ) : null}
+      {entry !== null ? <ReceiptRow term="Plan entry" value={entry} /> : null}
+      {stop !== null ? <ReceiptRow term="Plan stop" value={stop} /> : null}
+      <ReceiptRow term="Plan target" value={target ?? "No target carried"} />
+    </dl>
+  );
+}
+
+/**
+ * Read-only comparison of the carried plan against the authoritative sizing
+ * result. Consumes both results as-is; computes nothing new.
+ */
+function DecisionComparison({
+  handoff,
+  result,
+}: {
+  handoff: RiskGuardHandoffFields;
+  result: RiskGuardResult;
+}) {
+  return (
+    <Card className="mt-6">
+      <h3 className="type-subtitle">Decision comparison</h3>
+      <p className="type-helper mt-1.5 text-ink-muted">
+        Plan values as carried in. Sizing calculated from the current form.
+      </p>
+      <p className="type-eyebrow mt-4 text-ink-muted">From your TradePlan</p>
+      <div className="mt-1">
+        <PlanOriginDetails handoff={handoff} />
+      </div>
+      {result.status === "allowed" ? (
+        <>
+          <p className="type-eyebrow mt-4 text-ink-muted">Sizing result</p>
+          <dl className="mt-1 divide-y divide-line border-t border-line">
+            <ReceiptRow term="Risk budget" value={formatPaise(result.riskBudgetPaise)} />
+            <ReceiptRow
+              term="Allowed quantity"
+              value={`${formatCount(result.quantity)} units · ${formatCount(result.lots)} ${result.lots === 1 ? "lot" : "lots"}`}
+            />
+            <ReceiptRow term="Used risk" value={formatPaise(result.usedRiskPaise)} />
+            <ReceiptRow term="Unused budget" value={formatPaise(result.unusedRiskPaise)} />
+            {result.riskRewardRatio !== null ? (
+              <ReceiptRow term="R:R" value={`${result.riskRewardRatio.toFixed(2)} : 1`} />
+            ) : null}
+          </dl>
+        </>
+      ) : (
+        <p className="type-helper mt-4 text-ink-muted">
+          No position authorized — the blocked reason above applies to these inputs.
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -456,6 +531,9 @@ export function RiskGuardCalculator({
             </details>
           </Card>
         )}
+        {hasHandoff && result !== null ? (
+          <DecisionComparison handoff={initialFields} result={result} />
+        ) : null}
         <Callout title="Understand your trade before taking it" className="mt-6">
           RiskGuard calculates the consequences of the numbers you enter. It does not predict profit,
           guarantee safety, or recommend trades.

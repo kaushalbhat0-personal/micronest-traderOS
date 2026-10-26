@@ -28,7 +28,40 @@ test("TradePlan hands a coherent plan to RiskGuard with values prefilled", async
   await expect(page.getByLabel("Target (₹)")).toHaveValue("110");
 });
 
-test("prefilled handoff values stay editable and RiskGuard recalculates", async ({ page }) => {
+test("sized decision shows a plan-versus-sizing comparison", async ({ page }) => {
+  await page.goto("/tools/trade-plan");
+  await fillPlan(page);
+  await page.getByRole("link", { name: "Size this trade in RiskGuard" }).click();
+
+  await page.getByLabel("Capital (₹)").fill("100000");
+  await page.getByLabel("Risk %").fill("2.5");
+  await page.getByLabel("Lot size").fill("75");
+  await page.getByRole("button", { name: "Calculate position size" }).click();
+
+  // Budget 2500, per-unit risk 5 → max 500, 6 lots, 450 units.
+  await expect(page.getByText("Within your risk budget")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Decision comparison" }),
+  ).toBeVisible();
+  const comparison = page.locator("section", {
+    has: page.getByRole("heading", { name: "Decision comparison" }),
+  });
+  await expect(comparison).toContainText("Plan entry");
+  await expect(comparison).toContainText("₹100.00");
+  await expect(comparison).toContainText("₹2,500.00");
+  await expect(comparison).toContainText("450 units");
+  await expect(comparison).toContainText("Plan values as carried in");
+  expect(page.url()).not.toContain("Breakout");
+
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("edited handoff keeps plan-origin values separate from the sizing result", async ({
+  page,
+}) => {
   await page.goto("/tools/trade-plan");
   await fillPlan(page);
   await page.getByRole("link", { name: "Size this trade in RiskGuard" }).click();
@@ -43,7 +76,47 @@ test("prefilled handoff values stay editable and RiskGuard recalculates", async 
 
   // Entry 200 against stop 95: per-unit risk 105, budget 2500 → 23 units.
   await expect(page.getByText("Within your risk budget")).toBeVisible();
-  await expect(page.locator("p.type-metric")).toContainText("23");
+  const comparison = page.locator("section", {
+    has: page.getByRole("heading", { name: "Decision comparison" }),
+  });
+  await expect(comparison).toContainText("Plan entry");
+  await expect(comparison).toContainText("₹100.00");
+  await expect(comparison).toContainText("₹2,415.00");
+});
+
+test("blocked sizing shows the plan but no success numbers", async ({ page }) => {
+  await page.goto("/tools/trade-plan");
+  await fillPlan(page);
+  await page.getByRole("link", { name: "Size this trade in RiskGuard" }).click();
+
+  await page.getByLabel("Capital (₹)").fill("500");
+  await page.getByLabel("Risk %").fill("1");
+  await page.getByLabel("Lot size").fill("75");
+  await page.getByRole("button", { name: "Calculate position size" }).click();
+
+  await expect(page.getByText("Trade blocked", { exact: true })).toBeVisible();
+  const comparison = page.locator("section", {
+    has: page.getByRole("heading", { name: "Decision comparison" }),
+  });
+  await expect(comparison).toContainText("Plan entry");
+  await expect(comparison).toContainText("₹100.00");
+  await expect(comparison).toContainText("No position authorized");
+  await expect(comparison).not.toContainText("Used risk");
+});
+
+test("direct RiskGuard use shows no comparison section", async ({ page }) => {
+  await page.goto("/tools/risk-guard");
+  await page.getByLabel("Capital (₹)").fill("100000");
+  await page.getByLabel("Risk %").fill("2.5");
+  await page.getByLabel("Lot size").fill("1");
+  await page.getByLabel("Entry (₹)").fill("100");
+  await page.getByLabel("Stop-loss (₹)").fill("95");
+  await page.getByRole("button", { name: "Calculate position size" }).click();
+
+  await expect(page.getByText("Within your risk budget")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Decision comparison" }),
+  ).toHaveCount(0);
 });
 
 test("an incoherent plan exposes no sizing handoff", async ({ page }) => {
