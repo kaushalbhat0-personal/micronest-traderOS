@@ -1,0 +1,52 @@
+import { describe, expect, it } from "vitest";
+
+import { TOOL_GROUPS, TOOLS } from "@/config/tools";
+
+describe("tool registry", () => {
+  it("contains the ten planned tools", () => {
+    expect(TOOLS).toHaveLength(10);
+    expect(TOOLS.map((tool) => tool.name)).toEqual([
+      "RiskGuard",
+      "TradePlan",
+      "TradeCost",
+      "StrikeLens",
+      "GreekMap",
+      "OI Mapper",
+      "StructureMap",
+      "SetupScore",
+      "LeakDetector",
+      "ReviewOS",
+    ]);
+  });
+
+  it("keeps ids and slugs unique", () => {
+    expect(new Set(TOOLS.map((tool) => tool.id)).size).toBe(TOOLS.length);
+    expect(new Set(TOOLS.map((tool) => tool.slug)).size).toBe(TOOLS.length);
+  });
+
+  it("marks RiskGuard as coming soon and everything else as planned", () => {
+    const riskGuard = TOOLS.find((tool) => tool.id === "risk-guard");
+    expect(riskGuard?.status).toBe("coming_soon");
+
+    const others = TOOLS.filter((tool) => tool.id !== "risk-guard");
+    expect(others.every((tool) => tool.status === "planned")).toBe(true);
+  });
+
+  it("does not claim any tool is live in Phase 0", () => {
+    expect(TOOLS.some((tool) => tool.status === "live")).toBe(false);
+  });
+
+  it("assigns every tool to a declared group", () => {
+    const groupIds = new Set(TOOL_GROUPS.map((group) => group.id));
+
+    for (const tool of TOOLS) {
+      expect(groupIds.has(tool.group)).toBe(true);
+    }
+  });
+
+  it("gives every group at least one tool", () => {
+    for (const group of TOOL_GROUPS) {
+      expect(TOOLS.some((tool) => tool.group === group.id)).toBe(true);
+    }
+  });
+});
