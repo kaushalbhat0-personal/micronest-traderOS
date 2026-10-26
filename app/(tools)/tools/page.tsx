@@ -21,7 +21,7 @@ export default function ToolsPage() {
       <PageHeader
         eyebrow="Toolkit"
         title="Tools"
-        description="Ten focused tools, grouped by the job they do. RiskGuard is live; the rest are in development."
+        description="Ten focused tools, grouped by the job they do. RiskGuard and TradePlan are live; the rest are in development."
       />
 
       <nav aria-label="Tool groups" className="mt-7">

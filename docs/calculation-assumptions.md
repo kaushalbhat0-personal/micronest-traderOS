@@ -1,6 +1,6 @@
 # Calculation Assumptions & Provenance
 
-**Status:** Phase 2 — RG-001 (RiskGuard) shipped. No other trading calculation is implemented yet.
+**Status:** Phase 3 — RG-001 (RiskGuard) and TP-001 (TradePlan) shipped. No other trading calculation is implemented yet.
 
 This document is the single place to record where a formula comes from, what it assumes, and how
 it is tested. A calculation must have a record here **before** it ships.
@@ -85,7 +85,7 @@ Tool-specific deviations must be recorded in the formula entry.
 
 ---
 
-## 6. Shipped record
+## 6. Shipped records
 
 ### RG-001 — Position size from risk budget
 
@@ -129,6 +129,42 @@ Tool-specific deviations must be recorded in the formula entry.
 - **Tests:** `tests/unit/risk-guard.test.ts` (happy paths, boundaries, blocked cases, precision,
   input boundary); `e2e/risk-guard.spec.ts` (allowed flow, blocked flow, axe scan)
 
+### TP-001 — Trade-plan coherence check
+
+- **Tool:** TradePlan (`features/trade-plan/trade-plan.ts`, `checkPlan`)
+- **Status:** shipped
+- **Definition:**
+  - long: `riskPerUnitPaise = entryPaise − stopPaise`; short: `riskPerUnitPaise = stopPaise − entryPaise`
+  - with target — long: `reward = targetPaise − entryPaise`; short: `reward = entryPaise − targetPaise`;
+    `riskRewardRatio = reward / riskPerUnitPaise`. Without a target, R:R is absent (null), never fabricated.
+- **Inputs:**
+  - direction: `long` | `short`
+  - entryPaise, stopLossPaise: integer paise, > 0
+  - targetPaise: optional integer paise, > 0
+  - setupName: text, 1 … 80 characters; thesis: text, 1 … 500 characters;
+    invalidation: text, 1 … 280 characters; notes: optional text, ≤ 500 characters
+- **Outputs:** riskPerUnitPaise, rewardPerUnitPaise | null, riskRewardRatio | null (plain ratio;
+  display only), plus the plan text echoed for the receipt
+- **Assumptions:** direction is explicit; stop must be on the loss side of entry; target, if
+  given, must be on the profit side; brokerage, taxes, charges and slippage are excluded. The
+  setup, thesis and invalidation are the user's own words — the tool checks coherence, not quality.
+- **Units:** paise for all money; plain ratio for R:R.
+- **Rounding policy:** no rounding — integer-paise subtraction is exact. R:R is computed from
+  unrounded paise values and displayed to two decimals.
+- **Edge cases:**
+  - stop on the wrong side of entry (or equal) → incoherent `invalid_stop`; direction is never
+    silently corrected
+  - target on the wrong side of entry (or equal) → incoherent `invalid_target` (the valid
+    per-unit risk is still reported so the user sees the maths)
+  - missing target → coherent without reward/R:R, explicitly labelled "not calculated"
+  - non-positive prices, empty setup/thesis/invalidation, or over-length text → incoherent
+    `invalid_input` (length/shape enforced at the Zod boundary first)
+- **Source:** independently derived arithmetic; public mathematics only. No proprietary method.
+- **Effective date:** n/a (not a statutory rate)
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/trade-plan.test.ts` (direction, stop, target, arithmetic, precision,
+  receipt, boundary); `e2e/trade-plan.spec.ts` (coherent flow, incoherent flow, axe scan)
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -163,3 +199,4 @@ broker. A rate change is a data change, not a formula change.
 ## 9. Implemented calculations
 
 - RG-001 — Position size from risk budget (RiskGuard, v1.0.0, shipped). See §6.
+- TP-001 — Trade-plan coherence check (TradePlan, v1.0.0, shipped). See §6.

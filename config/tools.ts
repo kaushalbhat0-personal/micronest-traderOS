@@ -64,7 +64,7 @@ export const TOOLS = [
     name: "TradePlan",
     summary: "Turn an idea into a structured plan with entry, stop, targets and checkpoints.",
     group: "plan-risk",
-    status: "planned",
+    status: "live",
   },
   {
     id: "trade-cost",
