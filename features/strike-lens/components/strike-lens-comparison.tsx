@@ -213,7 +213,7 @@ export function StrikeLensComparison({
           <Field
             id="sl-spot"
             label="Spot (₹)"
-            hint="Current price of the underlying."
+            hint="The underlying price you want to compare against."
             error={errors.spot}
           >
             <input

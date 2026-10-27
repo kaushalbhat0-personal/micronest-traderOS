@@ -78,7 +78,7 @@ export const TOOLS = [
     id: "strike-lens",
     slug: "strike-lens",
     name: "StrikeLens",
-    summary: "Compare option strikes on premium, breakeven and payoff at expiry.",
+    summary: "Compare option strikes on premium, moneyness and breakeven.",
     group: "options",
     status: "live",
   },
