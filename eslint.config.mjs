@@ -12,6 +12,7 @@ export default defineConfig([
     "coverage/**",
     "playwright-report/**",
     "test-results/**",
+    "marketing-artifacts/**",
     "next-env.d.ts",
   ]),
   {

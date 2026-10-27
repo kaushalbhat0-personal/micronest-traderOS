@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:list": "playwright test --list",
+    "screenshots:marketing": "node scripts/marketing-screenshots.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -43,6 +44,7 @@
     "eslint-config-next": "16.4.3",
     "jsdom": "30.1.3",
     "prettier": "3.9.10",
+    "sharp": "0.35.5",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "8.3.5",
