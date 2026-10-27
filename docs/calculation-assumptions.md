@@ -1,6 +1,6 @@
 # Calculation Assumptions & Provenance
 
-**Status:** Phase 3 — RG-001 (RiskGuard) and TP-001 (TradePlan) shipped. No other trading calculation is implemented yet.
+**Status:** SL-001 (StrikeLens) specified alongside RG-001, TP-001 and TC-001. No other trading calculation is implemented yet.
 
 This document is the single place to record where a formula comes from, what it assumes, and how
 it is tested. A calculation must have a record here **before** it ships.
@@ -225,6 +225,64 @@ Tool-specific deviations must be recorded in the formula entry.
   boundary, handoff, provenance); `tests/components/trade-cost.test.tsx` (estimate, receipt,
   handoff, unsupported); `e2e/trade-cost.spec.ts` (estimate flow, handoff flow, axe scan)
 
+### SL-001 — Option strike comparison
+
+- **Tool:** StrikeLens (`features/strike-lens/strike-lens.ts`, `compareStrikes`)
+- **Status:** shipped
+- **Definition:**
+  - one comparison set: one spot price, one option type (`call` | `put`), 1–5 unique strikes each
+    with a premium; rows are returned in ascending strike order
+  - moneyness — call: `spot > strike` → ITM, `spot < strike` → OTM, `spot == strike` → ATM;
+    put: `strike > spot` → ITM, `strike < spot` → OTM, `strike == spot` → ATM. Exact paise
+    equality only; no tolerance, no nearest-strike ATM
+  - intrinsic — call: `max(spot − strike, 0)`; put: `max(strike − spot, 0)`
+  - extrinsic — `premium − intrinsic` when `premium >= intrinsic`; otherwise the row is
+    `inconsistent` and extrinsic is absent (null), never negative, never clamped to zero
+  - signed distance: `strike − spot` (negative means the strike is below spot);
+    `absDistance = |distance|`
+  - percentage distance (display only): integer basis points
+    `roundHalfUp(|distance| × 10_000 / spot)` via quotient/remainder decomposition (half-up on
+    the exact remainder); displayed as `(bps / 100).toFixed(2)%`
+  - option breakeven before transaction costs (long, expiry) — call: `strike + premium`;
+    put: `strike − premium`. A breakeven ≤ 0 (reachable on a deep-ITM put whose premium covers
+    the strike) is displayed with a factual note, never blocked
+  - nearest-to-spot flag: the row with minimum `|distance|`; ties resolve to the lower strike
+    (deterministic because rows are strike-ordered before selection). Labelled "Nearest to
+    spot", never ATM
+- **Inputs:**
+  - spotPaise: integer paise, 1 … 100_000_000_000 (₹100 crore)
+  - optionType: `call` | `put` (displayed CE / PE); one type per comparison, never mixed
+  - rows: 1 … 5 × { strikePaise: integer paise, 1 … 100_000_000_000; premiumPaise: integer paise,
+    1 … 100_000_000_000 }; strikes unique within the set
+  - expiryLabel: optional free text, ≤ 30 characters; display/provenance only, never calculated
+- **Outputs:** per row — moneyness, intrinsicPaise, extrinsicPaise | null, signed/absolute
+  distancePaise, distanceBps, breakevenPaise, breakevenAtOrBelowZero flag, isNearestToSpot flag,
+  plus `inconsistent` status + reason when `premium < intrinsic`
+- **Assumptions:** long positions only; expiry payoff; transaction costs, STT on options,
+  slippage and time decay excluded; short-option breakeven out of scope; the inputs are the
+  user's own numbers, not verified market data
+- **Units:** paise for all money; plain ITM/ATM/OTM labels; integer basis points for percentage
+  distance (display only)
+- **Rounding policy:** no rounding — exact integer-paise arithmetic; percentage shown to two
+  decimals from integer basis points
+- **Edge cases:**
+  - `premium < intrinsic` → row-level `inconsistent` (warn, not fatal); remaining row fields
+    still reported
+  - PE breakeven ≤ 0 → shown with the note "breakeven at or below zero — premium covers the
+    full strike"
+  - non-positive/over-cap spot, strike or premium, unknown option type, empty or oversized row
+    set, duplicate strikes → `invalid` (`invalid_input`)
+- **Source:** independently derived arithmetic on public textbook definitions (intrinsic as
+  `max(spot − strike, 0)` / `max(strike − spot, 0)`, premium = intrinsic + extrinsic, long
+  breakeven `strike ± premium`). No proprietary method, no pricing model, no Greeks, no IV.
+- **Effective date:** n/a (not a statutory rate)
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strike-lens.test.ts` (moneyness incl. ±1 paise ATM boundaries,
+  nearest incl. ties, intrinsic/extrinsic, inconsistent, breakeven incl. ≤ 0, distance, bps
+  half-up, parsing, caps, duplicates, ordering, handoff); `tests/components/strike-lens.test.tsx`
+  (empty state, rows, warnings, receipt, type switch, handoff prefill);
+  `e2e/strike-lens.spec.ts` (flows, prefill, axe scan)
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -261,3 +319,4 @@ broker. A rate change is a data change, not a formula change.
 - RG-001 — Position size from risk budget (RiskGuard, v1.0.0, shipped). See §6.
 - TP-001 — Trade-plan coherence check (TradePlan, v1.0.0, shipped). See §6.
 - TC-001 — Transaction cost estimate and breakeven (TradeCost, v1.0.0, shipped). See §6.
+- SL-001 — Option strike comparison (StrikeLens, v1.0.0, shipped). See §6.

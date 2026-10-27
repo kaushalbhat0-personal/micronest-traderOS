@@ -61,8 +61,8 @@ test("landing page introduces the problem, the toolkit and the philosophy", asyn
   ).toBeVisible();
 
   const statusLine = page.getByText(/10 tools/);
-  await expect(statusLine).toContainText("7 planned");
-  await expect(statusLine).toContainText("3 live");
+  await expect(statusLine).toContainText("6 planned");
+  await expect(statusLine).toContainText("4 live");
 
   await expect(page.getByRole("link", { name: "Browse all tools" })).toHaveAttribute(
     "href",
@@ -78,8 +78,8 @@ test("tools index lists all ten tools with honest statuses", async ({ page }) =>
   }
 
   await expect(page.getByText("Coming soon")).toHaveCount(0);
-  await expect(page.getByText("Planned")).toHaveCount(7);
-  await expect(page.getByText("Live", { exact: true })).toHaveCount(3);
+  await expect(page.getByText("Planned")).toHaveCount(6);
+  await expect(page.getByText("Live", { exact: true })).toHaveCount(4);
 });
 
 test("tool group links resolve to rendered sections", async ({ page }) => {

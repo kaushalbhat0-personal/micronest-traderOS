@@ -80,7 +80,7 @@ export const TOOLS = [
     name: "StrikeLens",
     summary: "Compare option strikes on premium, breakeven and payoff at expiry.",
     group: "options",
-    status: "planned",
+    status: "live",
   },
   {
     id: "greek-map",
