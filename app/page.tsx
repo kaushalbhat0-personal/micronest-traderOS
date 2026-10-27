@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
+import { ProductShowcase } from "@/components/home/product-showcase";
 import { buttonClasses } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
@@ -296,6 +297,25 @@ export default function HomePage() {
               </Reveal>
             ))}
           </ul>
+        </Container>
+      </section>
+
+      <section className="border-b border-line">
+        <Container className="py-12 sm:py-16">
+          <Reveal>
+            <div className="max-w-2xl">
+              <p className="type-eyebrow text-ink-muted">Product tour</p>
+              <h2 className="type-section mt-2">See the real product</h2>
+              <p className="type-body mt-2 text-ink-muted">
+                Real tools. Real calculations. No simulated dashboards. Each screenshot below is the
+                live tool with synthetic illustrative inputs.
+              </p>
+            </div>
+          </Reveal>
+
+          <Reveal className="mt-8" delay={60}>
+            <ProductShowcase />
+          </Reveal>
         </Container>
       </section>
 
