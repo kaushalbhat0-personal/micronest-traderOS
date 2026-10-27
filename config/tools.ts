@@ -88,7 +88,7 @@ export const TOOLS = [
     name: "GreekMap",
     summary: "Read how delta, theta and other Greeks change across strikes.",
     group: "options",
-    status: "planned",
+    status: "live",
   },
   {
     id: "oi-mapper",

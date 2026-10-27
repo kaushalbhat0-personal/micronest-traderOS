@@ -1,6 +1,6 @@
 # Calculation Assumptions & Provenance
 
-**Status:** SL-001 (StrikeLens) specified alongside RG-001, TP-001 and TC-001. No other trading calculation is implemented yet.
+**Status:** SL-001 (StrikeLens) and GM-001 (GreekMap) specified alongside RG-001, TP-001 and TC-001. No other trading calculation is implemented yet.
 
 This document is the single place to record where a formula comes from, what it assumes, and how
 it is tested. A calculation must have a record here **before** it ships.
@@ -283,6 +283,94 @@ Tool-specific deviations must be recorded in the formula entry.
   (empty state, rows, warnings, receipt, type switch, handoff prefill);
   `e2e/strike-lens.spec.ts` (flows, prefill, axe scan)
 
+### GM-001 — Single-option BSM-Merton price and Greeks with fixed scenarios
+
+- **Tool:** GreekMap (`features/greek-map/greek-map.ts`, `analyzeGreekMap`)
+- **Status:** shipped
+- **Definition:**
+  - Black-Scholes-Merton with continuous dividend yield, European exercise, one call or put:
+    `C = S·e^(−qT)·N(d1) − K·e^(−rT)·N(d2)`,
+    `P = K·e^(−rT)·N(−d2) − S·e^(−qT)·N(−d1)`,
+    `d1 = [ln(S/K) + (r−q+σ²/2)T] / (σ√T)`, `d2 = d1 − σ√T`, `T = DTE / 365`
+    (S, K in rupees converted from integer paise; σ, r, q as annual decimals)
+  - normal CDF N(x) via the Abramowitz–Stegun 7.1.26 erf approximation
+    (`N(x) = ½(1 + sign·erf(|x|/√2))`, `p = 0.3275911`); documented error bound ≤ 1.5e-7
+  - Greeks — call delta `e^(−qT)·N(d1)`; put delta `e^(−qT)·(N(d1)−1)` (per ₹1, 4dp);
+    gamma `e^(−qT)·φ(d1) / (S·σ·√T)`, same for call and put (per ₹1, 6dp);
+    theta `−∂V/∂T ÷ 365` in ₹ per calendar day (2dp; Hull-sign convention, so a
+    deep-ITM put can print a positive theta); vega `S·e^(−qT)·φ(d1)·√T ÷ 100`
+    in ₹ per 1pp IV (2dp, same for call and put); rho call `K·T·e^(−rT)·N(d2) ÷ 100`,
+    put `−K·T·e^(−rT)·N(−d2) ÷ 100` in ₹ per 1pp rate (2dp)
+  - fixed spot scenarios −10/−5/0/+5/+10% on S (K, DTE, σ, r, q held constant),
+    each replaying price, delta, gamma, theta/day and vega; the 0% row repeats
+    the base point and is badged "Your inputs"
+  - fixed time scenarios −1/−3/−7 days on DTE (spot, σ, r, q held constant),
+    each replaying price and theta/day; a row whose DTE would fall under 1 is
+    omitted with the note "omitted — V1 has a 1-day DTE floor", never clamped to 1
+  - optional user premium (integer paise) is used only for an arithmetic comparison
+    (`your premium − model value` in exact paise), shown subordinate to the Greeks
+    with the wording "Arithmetic difference only — not a mispricing signal."
+  - a premium under intrinsic value (`max(spot−strike,0)` call / `max(strike−spot,0)`
+    put, exact paise) raises an informational warning and the model still calculates;
+    a premium outside the European arbitrage bounds
+    (call `[max(S·e^−qT − K·e^−rT, 0), S·e^−qT]`,
+    put `[max(K·e^−rT − S·e^−qT, 0), K·e^−rT]`, half-a-paise tolerance) raises the
+    warning "Premium is outside the European arbitrage bounds for the supplied inputs.
+    No single IV reproduces this premium under BSM." There is no IV solver.
+- **Inputs:**
+  - optionType: `call` | `put` (displayed CE / PE)
+  - spotPaise, strikePaise: integer paise, 1 … 100_000_000_000 (₹100 crore)
+  - dteDays: calendar days, 1 … 730, up to 2 decimals — shape and range decided on
+    the exact decimal string via scaled-integer comparison, never on an IEEE parse
+  - volatility: 0.1% … 500% per year; rate: 0% … 20% per year; dividend yield:
+    0% … 15% per year — percents typed by the user, boundary decided on the exact
+    scaled integer (units of 0.0001%); no defaults, but an explicit 0 is accepted
+    for rate and dividend yield; the engine receives IEEE values after the boundary passes
+  - premiumPaise: optional integer paise, 1 … 100_000_000_000 when present
+  - expiryLabel: optional free text, ≤ 30 characters; display/provenance only, never calculated
+- **Outputs:** base model value (half-up to paise) plus five Greeks; intrinsicPaise;
+  five spot rows (price, delta, gamma, theta/day, vega, isBase flag); three time rows
+  (price, theta/day) or omission markers; comparison (your premium, model value,
+  signed paise difference) or null; warning list; GM-001 receipt
+- **Assumptions:** European exercise at expiry only; constant σ/r/q; lognormal prices
+  (geometric Brownian motion); continuous compounding; frictionless (no costs, taxes,
+  spreads, liquidity limits); discrete dividends, American exercise and smiles/skews
+  are outside the model; inputs are the user's own assumptions, unverified and not real-time
+- **Units:** paise for money (half-up display); per-₹1 delta/gamma; ₹/calendar-day theta;
+  ₹/1pp-IV vega; ₹/1pp-rate rho
+- **Rounding policy:** model value rounded half-up to paise for display; Greeks shown at
+  fixed decimals (4/6/2/2/2dp); scenario spot rounded half-up to paise for display while
+  the maths uses full precision; the arbitrage check tolerates half a paise so float dust
+  never warns on a boundary premium
+- **Edge cases:**
+  - out-of-range or non-positive money/DTE/vol/rate/dividend, unknown option type, or
+    any non-finite intermediate/result → blocked `invalid_input` (NaN/Infinity never
+    reaches the UI, nothing is clamped)
+  - premium under intrinsic or outside the arbitrage bounds → informational warning,
+    calculation continues, comparison still shown
+  - time rows under the 1-day floor → omitted with a factual note, never clamped
+- **Source:** public textbook mathematics (Black–Scholes–Merton with continuous yield;
+  Abramowitz–Stegun 7.1.26); implemented independently. Reference values in tests were
+  produced from the same closed form with an independent Simpson-rule erf implementation,
+  including the standard one-year ATM fixture (call ≈ ₹10.4506). No proprietary method.
+- **Effective date:** n/a (not a statutory rate)
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/greek-map.test.ts` (CDF values/symmetry/tails, d1/d2, golden
+  call/put/ATM/ITM/OTM/dividend fixtures, Greek signs and conventions incl. positive
+  deep-ITM put theta, put-call parity, q=0 reduction, determinism, analytic-vs-FD
+  cross-checks, DTE/vol/rate/dividend boundaries incl. exact-string policy, cap-scale,
+  non-finite protection, display rounding, premium warnings, scenario rows and floor
+  omission, handoff allowlist); `tests/components/greek-map.test.tsx` (empty state,
+  call/put, type switch, comparison, warnings, blocked input, scenarios, omission,
+  receipt, forbidden-copy scan, handoff prefill, 360px labels, a11y labels);
+  `e2e/greek-map.spec.ts` (route, call/put, Greeks, scenarios, floor, comparison,
+  blocked input, warnings, receipt, handoff prefill/editability, unknown-key and
+  narrative rejection, axe, 360/390/768/1280, reduced motion, touch targets, overflow)
+- **Model-vs-NSE distinction:** the receipt states "MicroNest model:
+  Black-Scholes-Merton with continuous dividend yield" and "This is a user-assumption
+  model illustration and is not an NSE settlement or exchange pricing calculation."
+  The model value is not a prediction; scenarios are not forecasts. Not investment advice.
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -320,3 +408,4 @@ broker. A rate change is a data change, not a formula change.
 - TP-001 — Trade-plan coherence check (TradePlan, v1.0.0, shipped). See §6.
 - TC-001 — Transaction cost estimate and breakeven (TradeCost, v1.0.0, shipped). See §6.
 - SL-001 — Option strike comparison (StrikeLens, v1.0.0, shipped). See §6.
+- GM-001 — Single-option BSM-Merton price and Greeks with fixed scenarios (GreekMap, v1.0.0, shipped). See §6.
