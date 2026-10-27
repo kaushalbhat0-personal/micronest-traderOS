@@ -5,6 +5,7 @@ const PAGES = [
   { path: "/tools", heading: "Tools" },
   { path: "/tools/risk-guard", heading: "RiskGuard" },
   { path: "/tools/trade-plan", heading: "TradePlan" },
+  { path: "/tools/trade-cost", heading: "TradeCost" },
   { path: "/pricing", heading: "Pricing" },
   { path: "/disclaimer", heading: "Disclaimer" },
 ] as const;
@@ -60,8 +61,8 @@ test("landing page introduces the problem, the toolkit and the philosophy", asyn
   ).toBeVisible();
 
   const statusLine = page.getByText(/10 tools/);
-  await expect(statusLine).toContainText("8 planned");
-  await expect(statusLine).toContainText("2 live");
+  await expect(statusLine).toContainText("7 planned");
+  await expect(statusLine).toContainText("3 live");
 
   await expect(page.getByRole("link", { name: "Browse all tools" })).toHaveAttribute(
     "href",
@@ -77,8 +78,8 @@ test("tools index lists all ten tools with honest statuses", async ({ page }) =>
   }
 
   await expect(page.getByText("Coming soon")).toHaveCount(0);
-  await expect(page.getByText("Planned")).toHaveCount(8);
-  await expect(page.getByText("Live", { exact: true })).toHaveCount(2);
+  await expect(page.getByText("Planned")).toHaveCount(7);
+  await expect(page.getByText("Live", { exact: true })).toHaveCount(3);
 });
 
 test("tool group links resolve to rendered sections", async ({ page }) => {

@@ -168,6 +168,62 @@ Tool-specific deviations must be recorded in the formula entry.
 - **Tests:** `tests/unit/trade-plan.test.ts` (direction, stop, target, arithmetic, precision,
   receipt, boundary); `e2e/trade-plan.spec.ts` (coherent flow, incoherent flow, axe scan)
 
+### TC-001 — Transaction cost estimate and breakeven
+
+- **Tool:** TradeCost (`features/trade-cost/trade-cost.ts`, `calculateCosts`)
+- **Status:** shipped
+- **Definition:**
+  - legs — long: `buyPrice = entryPaise`, `sellPrice = exitPaise`; short: `sellPrice = entryPaise`, `buyPrice = exitPaise`
+  - `turnoverBuy = buyPrice × quantity`; `turnoverSell = sellPrice × quantity`
+  - `grossPnl = turnoverSell − turnoverBuy` (both directions; legs are direction-mapped)
+  - per side: `stt` (delivery 1/1000 both sides; intraday 25/1_000_000 sell only),
+    `nseTxn` 30699/1_000_000_000 (₹306.99/crore), `ipft` 1/1_000_000_000 (₹0.01/crore),
+    `stamp` buy only (delivery 15/100_000; intraday 3/100_000), `sebi` 1/1_000_000
+  - each leg-side line = `roundHalfUp(turnover × num/den)`, exact integer arithmetic, ties up
+  - `gst = roundHalfUp((brokerage + exact NSE txn + exact SEBI) × 18/100)` — Model 2:
+    one rounding on exact pre-rounding amounts, never on rounded lines
+  - `totalCharges = brokerage + stt + nseTxn + ipft + stamp + sebi + gst`
+  - `netPnl = grossPnl − totalCharges`; `costToGrossRatio = total/gross` (display only, null when gross ≤ 0)
+  - breakeven — long: smallest exit price with net ≥ 0; short: largest cover price
+    with net ≥ 0. Exact-root integer binary search on the exact (unrounded) net sign,
+    then exhaustive verification of the real rounded engine over [root−3, root+3]
+    (derived bound: 5 exit-varying lines × ±0.5 paise vs. ≥ ~1 paise/step exact slope).
+    Unreachable within the allowed domain → `breakeven_unreachable`, never a guess.
+- **Inputs:**
+  - direction: `long` | `short`
+  - mode: `delivery` | `intraday`
+  - entryPaise, exitPaise: integer paise, 1 … 100_000_000_000 (₹100 crore)
+  - quantity: integer shares, 1 … 1_000_000, plus a turnover guard (each leg price × quantity
+    must stay within `Number.MAX_SAFE_INTEGER`, checked via division)
+  - brokeragePaise: integer paise, 0 … 100_000_000_000 — round-trip total, explicitly
+    supplied; blank is rejected, 0 is accepted and never implied
+- **Outputs:** turnoverBuy/Sell, grossPnl, seven charge lines, totalCharges, netPnl,
+  costToGrossRatio | null, breakeven (ok price + residual | unreachable), verdict,
+  rounding + rate-set provenance
+- **Assumptions:** NSE cash market only (rate set `nse-cash-2026-03-01`, effective 1-Mar-2026);
+  retail short sales settle intraday (short + delivery → `short_delivery_unsupported`);
+  brokerage is the user's own assumption; IPFT is excluded from the GST base as an estimator
+  assumption pending contract-note confirmation; per-leg half-up rounding is an estimator
+  assumption; DP charges, slippage, penalties and account fees are excluded.
+- **Units:** paise, integer shares, plain ratio for cost-to-gross (display only).
+- **Rounding policy:** one half-up rounding per charge leg-side line (ties up); GST rounded
+  once on the exact taxable base (no double rounding). Receipt lines may foot a few paise
+  away from the GST base; the receipt states why.
+- **Edge cases:**
+  - short + delivery → `unsupported` (`short_delivery_unsupported`)
+  - gross ≤ 0 → ratio suppressed; verdict states costs on a loss plainly
+  - costs exceed gross → computed with an exceed-verdict; breakeven still reported
+  - breakeven unreachable within the domain → `unreachable` with a reason
+  - non-positive or out-of-range input, turnover beyond the exact range → `invalid_input`
+- **Source:** independently derived arithmetic on the versioned rate set
+  (`config/cost-rates.ts`); NSE Circular NSE/FA/73061 (27-Feb-2026, eff. 1-Mar-2026);
+  Finance Act STT schedule; Indian Stamp Act as amended 2020; SEBI fee schedule; CBIC GST.
+- **Effective date:** 2026-03-01 (rate set)
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/trade-cost.test.ts` (domain, rates, precision, GST footing, breakeven,
+  boundary, handoff, provenance); `tests/components/trade-cost.test.tsx` (estimate, receipt,
+  handoff, unsupported); `e2e/trade-cost.spec.ts` (estimate flow, handoff flow, axe scan)
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -203,3 +259,4 @@ broker. A rate change is a data change, not a formula change.
 
 - RG-001 — Position size from risk budget (RiskGuard, v1.0.0, shipped). See §6.
 - TP-001 — Trade-plan coherence check (TradePlan, v1.0.0, shipped). See §6.
+- TC-001 — Transaction cost estimate and breakeven (TradeCost, v1.0.0, shipped). See §6.

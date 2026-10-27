@@ -31,6 +31,13 @@ function formatPaise(paise: number): string {
   return inrExact.format(paise / 100);
 }
 
+/** Exact paise → plain rupee string for handoff URLs (trailing zeros trimmed). */
+function paiseToRupees(paise: number): string {
+  if (paise % 100 === 0) return String(paise / 100);
+  if (paise % 10 === 0) return `${Math.trunc(paise / 100)}.${String((paise % 100) / 10)}`;
+  return `${Math.trunc(paise / 100)}.${String(paise % 100).padStart(2, "0")}`;
+}
+
 function formatCount(value: number): string {
   return value.toLocaleString("en-IN");
 }
@@ -230,6 +237,21 @@ export function RiskGuardCalculator({
 
   const describe = (id: string, hint: boolean, hasError: boolean) =>
     hasError ? `${id}-error` : hint ? `${id}-hint` : undefined;
+
+  // Ephemeral handoff: only direction/entry/optional-target/quantity travel, as
+  // plain query values. TradeCost re-validates everything on arrival; no
+  // capital, risk %, narrative or brokerage ever enters the URL.
+  function costHref(): string {
+    if (result === null || result.status !== "allowed") return "/tools/trade-cost";
+    const params = new URLSearchParams({
+      direction: result.inputs.direction,
+      entry: paiseToRupees(result.inputs.entryPaise),
+      quantity: String(result.quantity),
+    });
+    if (result.inputs.targetPaise !== undefined)
+      params.set("target", paiseToRupees(result.inputs.targetPaise));
+    return `/tools/trade-cost?${params.toString()}`;
+  }
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -497,6 +519,17 @@ export function RiskGuardCalculator({
                 Charges and slippage are excluded. Verify with your broker. Not investment advice.
               </p>
             </details>
+            <h3 className="type-subtitle mt-5">Next decision</h3>
+            <p className="type-helper mt-1.5 text-ink-muted">
+              An affordable size is not automatically a cheap trade. TradeCost will now check
+              what transaction costs do to the economics of this sizing.
+            </p>
+            <a
+              href={costHref()}
+              className="type-label mt-3 inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            >
+              Check costs in TradeCost
+            </a>
           </Card>
         ) : (
           <Card>

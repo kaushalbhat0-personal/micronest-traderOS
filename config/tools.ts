@@ -72,7 +72,7 @@ export const TOOLS = [
     name: "TradeCost",
     summary: "Estimate brokerage, taxes and charges before you place the order.",
     group: "plan-risk",
-    status: "planned",
+    status: "live",
   },
   {
     id: "strike-lens",

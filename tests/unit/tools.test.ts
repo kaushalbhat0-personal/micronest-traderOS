@@ -24,18 +24,21 @@ describe("tool registry", () => {
     expect(new Set(TOOLS.map((tool) => tool.slug)).size).toBe(TOOLS.length);
   });
 
-  it("marks RiskGuard and TradePlan as live and everything else as planned", () => {
+  it("marks RiskGuard, TradePlan and TradeCost as live and everything else as planned", () => {
     expect(TOOLS.find((tool) => tool.id === "risk-guard")?.status).toBe("live");
     expect(TOOLS.find((tool) => tool.id === "trade-plan")?.status).toBe("live");
+    expect(TOOLS.find((tool) => tool.id === "trade-cost")?.status).toBe("live");
 
-    const others = TOOLS.filter((tool) => tool.id !== "risk-guard" && tool.id !== "trade-plan");
+    const others = TOOLS.filter(
+      (tool) => tool.id !== "risk-guard" && tool.id !== "trade-plan" && tool.id !== "trade-cost",
+    );
     expect(others.every((tool) => tool.status === "planned")).toBe(true);
   });
 
-  it("claims two live tools", () => {
+  it("claims three live tools", () => {
     const statuses: ToolStatus[] = TOOLS.map((tool) => tool.status);
 
-    expect(statuses.filter((status) => status === "live")).toHaveLength(2);
+    expect(statuses.filter((status) => status === "live")).toHaveLength(3);
   });
 
   it("assigns every tool to a declared group", () => {
@@ -62,9 +65,9 @@ describe("tool registry", () => {
   it("reports a status ledger that matches the registry", () => {
     const counts = statusCounts();
 
-    expect(counts.live).toBe(2);
+    expect(counts.live).toBe(3);
     expect(counts.coming_soon).toBe(0);
-    expect(counts.planned).toBe(8);
+    expect(counts.planned).toBe(7);
     expect(counts.live + counts.coming_soon + counts.planned).toBe(TOOLS.length);
   });
 });
