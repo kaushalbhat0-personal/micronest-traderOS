@@ -15,7 +15,7 @@ import {
  * instead of a validation error.
  */
 
-const MAX_PAISE = 10_000_000_000_00; // ₹100 crore in paise
+const MAX_PAISE = 100_000_000_000; // ₹100 crore in paise
 
 function rupeeField(label: string) {
   return z

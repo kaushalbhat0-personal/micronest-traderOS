@@ -151,7 +151,20 @@ function blocked(
  * RG-001: turn the user's risk constraint into an allowed quantity or a
  * transparent blocked outcome. Integer arithmetic throughout:
  * budget = floor(capital × bps / 10000); maxQty = floor(budget / perUnit).
+ *
+ * The budget uses a quotient/remainder decomposition so no intermediate
+ * product ever exceeds the exact integer-safe range:
+ * capital = q × 10000 + r → floor(capital × bps / 10000) = q × bps + floor(r × bps / 10000).
+ * With capital ≤ ₹100 crore (100_000_000_000 paise) and bps ≤ 10_000,
+ * q ≤ 10_000_000 (q × bps ≤ 10^11) and r < 10_000 (r × bps < 10^8),
+ * so every intermediate value is exactly representable.
  */
+function riskBudgetPaiseFor(capitalPaise: Paise, riskBps: BasisPoints): Paise {
+  const quotient = Math.floor(capitalPaise / 10_000);
+  const remainder = capitalPaise % 10_000;
+  return quotient * riskBps + Math.floor((remainder * riskBps) / 10_000);
+}
+
 export function decidePosition(input: RiskGuardInput): RiskGuardResult {
   const { capitalPaise, riskBps, direction, entryPaise, stopPaise, lotSize, targetPaise } = input;
 
@@ -175,7 +188,7 @@ export function decidePosition(input: RiskGuardInput): RiskGuardResult {
     );
   }
 
-  const riskBudgetPaise = Math.floor((capitalPaise * riskBps) / 10_000);
+  const riskBudgetPaise = riskBudgetPaiseFor(capitalPaise, riskBps);
   if (riskBudgetPaise <= 0) {
     return blocked(
       "invalid_input",

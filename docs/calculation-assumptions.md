@@ -100,7 +100,7 @@ Tool-specific deviations must be recorded in the formula entry.
   - with target — long: `reward = targetPaise − entryPaise`; short: `reward = entryPaise − targetPaise`;
     `riskRewardRatio = reward / riskPerUnitPaise`. Without a target, R:R is absent (null), never fabricated.
 - **Inputs:**
-  - capitalPaise: integer paise, 1 … 1_000_000_000_000 (₹100 crore)
+  - capitalPaise: integer paise, 1 … 100_000_000_000 (₹100 crore)
   - riskBps: integer basis points, 1 … 10_000 (0.01% … 100%)
   - direction: `long` | `short`
   - entryPaise, stopLossPaise: integer paise, > 0
@@ -113,7 +113,10 @@ Tool-specific deviations must be recorded in the formula entry.
 - **Units:** paise, basis points, integer quantity, integer lots.
 - **Rounding policy:** floor to whole units, then floor to whole lots (never round up — rounding
   up could exceed the stated risk). R:R is computed from unrounded paise values and displayed to
-  two decimals.
+  two decimals. The risk budget is computed exactly with quotient/remainder decomposition
+  (`q = floor(capital / 10_000)`, `r = capital % 10_000`,
+  `budget = q × bps + floor(r × bps / 10_000)`), so no intermediate product leaves the exact
+  integer-safe range for capital up to ₹100 crore.
 - **Edge cases:**
   - stop on the wrong side of entry (or equal) → blocked `invalid_stop`
   - risk budget below the cost of one lot → blocked `too_small_for_one_lot` (includes the

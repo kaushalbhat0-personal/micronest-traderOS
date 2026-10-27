@@ -431,3 +431,162 @@ describe("parseHandoffParams (TradePlan handoff boundary)", () => {
     expect(parseHandoffParams({ entry: ["100", "999"] })).toEqual({ entry: "100" });
   });
 });
+
+describe("numerical trust boundaries (₹100 crore cap, exact budget)", () => {
+  it("accepts exactly ₹100 crore at the input boundary", () => {
+    const parsed = riskGuardFieldsSchema.safeParse({
+      capital: "1000000000",
+      riskPercent: "2.5",
+      direction: "long",
+      entry: "100",
+      stop: "95",
+      lotSize: "1",
+      target: "",
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) throw new Error("expected valid");
+    expect(parsed.data.capital).toBe(100_000_000_000);
+  });
+
+  it("rejects ₹100 crore + ₹0.01 at the input boundary", () => {
+    const parsed = riskGuardFieldsSchema.safeParse({
+      capital: "1000000000.01",
+      riskPercent: "2.5",
+      direction: "long",
+      entry: "100",
+      stop: "95",
+      lotSize: "1",
+      target: "",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts a representative amount well below the cap", () => {
+    const parsed = riskGuardFieldsSchema.safeParse({
+      capital: "100000",
+      riskPercent: "2.5",
+      direction: "long",
+      entry: "100",
+      stop: "95",
+      lotSize: "1",
+      target: "",
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects risk 0% and accepts risk 100%", () => {
+    const base = {
+      capital: "100000",
+      direction: "long",
+      entry: "100",
+      stop: "95",
+      lotSize: "1",
+      target: "",
+    };
+    expect(
+      riskGuardFieldsSchema.safeParse({ ...base, riskPercent: "0" }).success,
+    ).toBe(false);
+    const full = riskGuardFieldsSchema.safeParse({ ...base, riskPercent: "100" });
+    expect(full.success).toBe(true);
+    if (!full.success) throw new Error("expected valid");
+    expect(full.data.riskPercent).toBe(10_000);
+
+    const blockedZero = decidePosition(input({ riskBps: 0 }));
+    expect(blockedZero.status).toBe("blocked");
+    if (blockedZero.status !== "blocked") throw new Error("expected blocked");
+    expect(blockedZero.code).toBe("invalid_input");
+
+    const allowedFull = decidePosition(
+      input({
+        capitalPaise: 10_000_000,
+        riskBps: 10_000,
+        entryPaise: 10_000,
+        stopPaise: 9_000,
+        lotSize: 1,
+      }),
+    );
+    expect(allowedFull.status).toBe("allowed");
+    if (allowedFull.status !== "allowed") throw new Error("expected allowed");
+    expect(allowedFull.riskBudgetPaise).toBe(10_000_000);
+  });
+
+  it("computes the exact budget at the ₹100 crore cap (100% risk)", () => {
+    const result = decidePosition(
+      input({
+        capitalPaise: 100_000_000_000,
+        riskBps: 10_000,
+        entryPaise: 100_000,
+        stopPaise: 99_000,
+        lotSize: 1,
+      }),
+    );
+    expect(result.status).toBe("allowed");
+    if (result.status !== "allowed") throw new Error("expected allowed");
+    expect(result.riskBudgetPaise).toBe(100_000_000_000);
+  });
+
+  it("computes the exact budget at the cap with fractional risk (99.99%)", () => {
+    const result = decidePosition(
+      input({
+        capitalPaise: 100_000_000_000,
+        riskBps: 9_999,
+        entryPaise: 100_000,
+        stopPaise: 99_000,
+        lotSize: 1,
+      }),
+    );
+    expect(result.status).toBe("allowed");
+    if (result.status !== "allowed") throw new Error("expected allowed");
+    // floor(100_000_000_000 × 9_999 / 10_000) = 99_990_000_000
+    expect(result.riskBudgetPaise).toBe(99_990_000_000);
+  });
+
+  it("floors correctly one paise below the cap at minimum risk", () => {
+    const atCap = decidePosition(
+      input({
+        capitalPaise: 100_000_000_000,
+        riskBps: 1,
+        entryPaise: 10_001,
+        stopPaise: 10_000,
+        lotSize: 1,
+      }),
+    );
+    expect(atCap.status).toBe("allowed");
+    if (atCap.status !== "allowed") throw new Error("expected allowed");
+    // floor(100_000_000_000 / 10_000) = 10_000_000
+    expect(atCap.riskBudgetPaise).toBe(10_000_000);
+
+    const belowCap = decidePosition(
+      input({
+        capitalPaise: 99_999_999_999,
+        riskBps: 1,
+        entryPaise: 10_001,
+        stopPaise: 10_000,
+        lotSize: 1,
+      }),
+    );
+    expect(belowCap.status).toBe("allowed");
+    if (belowCap.status !== "allowed") throw new Error("expected allowed");
+    // floor(99_999_999_999 / 10_000) = 9_999_999 (not 10_000_000)
+    expect(belowCap.riskBudgetPaise).toBe(9_999_999);
+  });
+
+  it("regression: exact budget where the old multiply-first formula was off by one paise", () => {
+    // Engine-level case above the UI cap (the engine is total over safe ints;
+    // the UI cap is enforced in validation). The old
+    // Math.floor((capitalPaise * riskBps) / 10_000) evaluated this as
+    // 998_900_100_001; the exact floor is 998_900_100_000.
+    const result = decidePosition(
+      input({
+        capitalPaise: 999_000_000_001,
+        riskBps: 9_999,
+        entryPaise: 100_000,
+        stopPaise: 99_000,
+        lotSize: 1,
+      }),
+    );
+    expect(result.status).toBe("allowed");
+    if (result.status !== "allowed") throw new Error("expected allowed");
+    expect(result.riskBudgetPaise).toBe(998_900_100_000);
+  });
+});

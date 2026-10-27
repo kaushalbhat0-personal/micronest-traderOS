@@ -17,7 +17,7 @@ import {
  * structured blocked result instead of a validation error.
  */
 
-const MAX_PAISE = 10_000_000_000_00; // ₹100 crore in paise
+const MAX_PAISE = 100_000_000_000; // ₹100 crore in paise
 const MAX_BPS = 10_000; // 100%
 const MAX_LOT_SIZE = 1_000_000;
 
