@@ -473,8 +473,8 @@ export function TradeCostCalculator({
               <p className="type-caption pb-1 text-ink-muted">
                 NSE cash market only (NSE/FA/73061, 1-Mar-2026). STT per Finance Act schedule;
                 stamp duty per Indian Stamp Act; SEBI fee per current schedule; GST 18% on
-                brokerage + NSE txn + SEBI (estimator assumption — IPFT excluded pending
-                contract-note confirmation).
+                brokerage + NSE txn + IPFT + SEBI (estimator assumption following broker
+                contract-note evidence — broker-specific treatment can differ).
               </p>
               <p className="type-caption pb-1 text-ink-muted">
                 Excluded: DP charges, slippage, penalties, account fees.

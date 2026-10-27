@@ -236,12 +236,12 @@ function chargeBothLegs(
 }
 
 /**
- * GST = roundHalfUp((brokerage + exact NSE txn + exact SEBI) × 18/100):
+ * GST = roundHalfUp((brokerage + exact NSE txn + exact IPFT + exact SEBI) × 18/100):
  * Model 2 — one rounding on the exact taxable base, never on already-rounded
  * lines. Decomposed so every intermediate is a safe integer: wholeTaxable
  * holds the integer parts (brokerage capped at the product money cap, so the
  * whole base stays at turnover scale); fracBillionths holds the fractional
- * parts scaled to billionths (< 4e9 for the four taxable lines); the final
+ * parts scaled to billionths (< 6e9 for the six taxable lines); the final
  * half-up test compares f_a·1e11 + r2·100 against 5e12 (both addends < 1e13).
  */
 function computeGst(
@@ -252,13 +252,17 @@ function computeGst(
     brokeragePaise +
     legs.buy.exact.txn.whole +
     legs.sell.exact.txn.whole +
+    legs.buy.exact.ipft.whole +
+    legs.sell.exact.ipft.whole +
     legs.buy.exact.sebi.whole +
     legs.sell.exact.sebi.whole;
   // Fractional taxable parts, scaled to billionths of a paise. Each addend is
-  // fracNum × (1e9/fracDen) < 1e9 (txn den is 1e9, SEBI den is 1e6).
+  // fracNum × (1e9/fracDen) < 1e9 (txn and IPFT dens are 1e9, SEBI den is 1e6).
   const fracBillionths =
     legs.buy.exact.txn.fracNum * (1_000_000_000 / legs.buy.exact.txn.fracDen) +
     legs.sell.exact.txn.fracNum * (1_000_000_000 / legs.sell.exact.txn.fracDen) +
+    legs.buy.exact.ipft.fracNum * (1_000_000_000 / legs.buy.exact.ipft.fracDen) +
+    legs.sell.exact.ipft.fracNum * (1_000_000_000 / legs.sell.exact.ipft.fracDen) +
     legs.buy.exact.sebi.fracNum * (1_000_000_000 / legs.buy.exact.sebi.fracDen) +
     legs.sell.exact.sebi.fracNum * (1_000_000_000 / legs.sell.exact.sebi.fracDen);
   const base = mulParts(wholeTaxable, COST_RATE_SET.gst.rate);
@@ -345,11 +349,15 @@ function exactFracTerms(
     brokeragePaise +
     legs.buy.exact.txn.whole +
     legs.sell.exact.txn.whole +
+    legs.buy.exact.ipft.whole +
+    legs.sell.exact.ipft.whole +
     legs.buy.exact.sebi.whole +
     legs.sell.exact.sebi.whole;
   const fracBillionths =
     legs.buy.exact.txn.fracNum * (1_000_000_000 / legs.buy.exact.txn.fracDen) +
     legs.sell.exact.txn.fracNum * (1_000_000_000 / legs.sell.exact.txn.fracDen) +
+    legs.buy.exact.ipft.fracNum * (1_000_000_000 / legs.buy.exact.ipft.fracDen) +
+    legs.sell.exact.ipft.fracNum * (1_000_000_000 / legs.sell.exact.ipft.fracDen) +
     legs.buy.exact.sebi.fracNum * (1_000_000_000 / legs.buy.exact.sebi.fracDen) +
     legs.sell.exact.sebi.fracNum * (1_000_000_000 / legs.sell.exact.sebi.fracDen);
   const gstBase = mulParts(wholeTaxable, COST_RATE_SET.gst.rate);

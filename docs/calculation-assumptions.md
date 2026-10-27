@@ -180,7 +180,7 @@ Tool-specific deviations must be recorded in the formula entry.
     `nseTxn` 30699/1_000_000_000 (₹306.99/crore), `ipft` 1/1_000_000_000 (₹0.01/crore),
     `stamp` buy only (delivery 15/100_000; intraday 3/100_000), `sebi` 1/1_000_000
   - each leg-side line = `roundHalfUp(turnover × num/den)`, exact integer arithmetic, ties up
-  - `gst = roundHalfUp((brokerage + exact NSE txn + exact SEBI) × 18/100)` — Model 2:
+  - `gst = roundHalfUp((brokerage + exact NSE txn + exact IPFT + exact SEBI) × 18/100)` — Model 2:
     one rounding on exact pre-rounding amounts, never on rounded lines
   - `totalCharges = brokerage + stt + nseTxn + ipft + stamp + sebi + gst`
   - `netPnl = grossPnl − totalCharges`; `costToGrossRatio = total/gross` (display only, null when gross ≤ 0)
@@ -202,9 +202,10 @@ Tool-specific deviations must be recorded in the formula entry.
   rounding + rate-set provenance
 - **Assumptions:** NSE cash market only (rate set `nse-cash-2026-03-01`, effective 1-Mar-2026);
   retail short sales settle intraday (short + delivery → `short_delivery_unsupported`);
-  brokerage is the user's own assumption; IPFT is excluded from the GST base as an estimator
-  assumption pending contract-note confirmation; per-leg half-up rounding is an estimator
-  assumption; DP charges, slippage, penalties and account fees are excluded.
+  brokerage is the user's own assumption; IPFT is included in the GST base as an estimator
+  assumption following broker contract-note evidence (Zerodha lists IPFT "₹0.01 per crore + GST";
+  broker-specific treatment can differ, so the result stays an estimate); per-leg half-up
+  rounding is an estimator assumption; DP charges, slippage, penalties and account fees are excluded.
 - **Units:** paise, integer shares, plain ratio for cost-to-gross (display only).
 - **Rounding policy:** one half-up rounding per charge leg-side line (ties up); GST rounded
   once on the exact taxable base (no double rounding). Receipt lines may foot a few paise

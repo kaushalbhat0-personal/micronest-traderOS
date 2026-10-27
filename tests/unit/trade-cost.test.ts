@@ -265,8 +265,8 @@ describe("TC-001 rounding precision", () => {
 });
 
 describe("TC-001 GST footing (Model 2)", () => {
-  it("includes brokerage, NSE txn and SEBI — and nothing else", () => {
-    expect(COST_RATE_SET.gst.base).toEqual(["brokerage", "nseTxn", "sebiFees"]);
+  it("includes brokerage, NSE txn, IPFT and SEBI in the GST base", () => {
+    expect(COST_RATE_SET.gst.base).toEqual(["brokerage", "nseTxn", "ipft", "sebiFees"]);
     const result = computed(calculateCosts(input()));
     // Exact base: 4000 + (30.699 + 33.7689) + (1 + 1.1) = 4066.5679
     // × 18% = 731.982222 → 732.
@@ -287,6 +287,36 @@ describe("TC-001 GST footing (Model 2)", () => {
     expect(result.nseTxnPaise).toBe(2);
     expect(result.sebiFeesPaise).toBe(0);
     expect(result.gstPaise).toBe(1);
+  });
+
+  it("includes exact IPFT in the GST base (not rounded, not excluded)", () => {
+    // Turnovers ₹4.25 lakh per side, no brokerage, delivery long.
+    // Hand-computed, independent of the engine:
+    //   txn exact total = 2 × 4250000 × 30699/1e9 = 260.9415
+    //   sebi exact total = 2 × 4250000/1e6 = 8.5
+    //   ipft exact total = 2 × 4250000/1e9 = 0.0085
+    // Old (IPFT-excluded) base = 269.4415 → × 18% = 48.49947 → 48.
+    // New base = 269.45 → × 18% = 48.501 → 49.
+    // IPFT rounded receipt lines are 0 + 0 here, so a GST of 49 proves the
+    // exact IPFT fraction entered the base: neither exclusion (48) nor
+    // rounded-first inclusion (48) can produce it.
+    const result = computed(
+      calculateCosts(
+        input({ entryPaise: 10_000, exitPaise: 10_000, quantity: 425, brokeragePaise: 0 }),
+      ),
+    );
+    expect(result.turnoverBuyPaise).toBe(4_250_000);
+    expect(result.nseIpftPaise).toBe(0);
+    expect(result.gstPaise).toBe(49);
+    expect(result.totalChargesPaise).toBe(
+      result.brokeragePaise +
+        result.sttPaise +
+        result.nseTxnPaise +
+        result.nseIpftPaise +
+        result.stampDutyPaise +
+        result.sebiFeesPaise +
+        result.gstPaise,
+    );
   });
 
   it("rounds GST exactly once (no double rounding)", () => {
@@ -470,6 +500,6 @@ describe("TC-001 provenance", () => {
     expect(TRADE_COST_EFFECTIVE_FROM).toBe("2026-03-01");
     expect(COST_RATE_SET.nseTxn).toEqual({ num: 30_699, den: 1_000_000_000 });
     expect(COST_RATE_SET.ipft).toEqual({ num: 1, den: 1_000_000_000 });
-    expect(COST_RATE_SET.gst.base).toEqual(["brokerage", "nseTxn", "sebiFees"]);
+    expect(COST_RATE_SET.gst.base).toEqual(["brokerage", "nseTxn", "ipft", "sebiFees"]);
   });
 });

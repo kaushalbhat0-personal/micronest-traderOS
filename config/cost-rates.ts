@@ -14,7 +14,7 @@ export type RateFraction = {
   den: number;
 };
 
-export type GstBaseMember = "brokerage" | "nseTxn" | "sebiFees";
+export type GstBaseMember = "brokerage" | "nseTxn" | "ipft" | "sebiFees";
 
 export type CostRateSet = {
   id: string;
@@ -43,8 +43,10 @@ export type CostRateSet = {
     rate: RateFraction;
     /**
      * Estimator assumption (see sourceNotes.gstBase): which components enter
-     * the GST base. IPFT is deliberately absent pending contract-note
-     * confirmation. STT and stamp duty are statutory levies, never in the base.
+     * the GST base. IPFT is included following broker contract-note evidence
+     * (Zerodha charges page lists IPFT "₹0.01 per crore + GST"); broker- or
+     * account-specific tax treatment can differ, so the result stays an
+     * estimate. STT and stamp duty are statutory levies, never in the base.
      */
     base: readonly GstBaseMember[];
   };
@@ -74,7 +76,7 @@ export const COST_RATE_SET: CostRateSet = {
   sebi: { num: 1, den: 1_000_000 }, // ₹10/crore/side
   gst: {
     rate: { num: 18, den: 100 }, // 18%
-    base: ["brokerage", "nseTxn", "sebiFees"],
+    base: ["brokerage", "nseTxn", "ipft", "sebiFees"],
   },
   roundingNote:
     "Half-up to paise per charge leg; GST computed on exact pre-rounding taxable amounts and rounded once. Estimator assumption — verify against your broker's contract note.",
@@ -87,6 +89,6 @@ export const COST_RATE_SET: CostRateSet = {
       "Indian Stamp Act as amended 2020 (uniform levy from 1-Jul-2020): delivery transfer 0.015% on buy; non-delivery transfer 0.003% on buy.",
     sebi: "Current SEBI fee schedule: ₹10 per crore of cash-market turnover, per side.",
     gstBase:
-      "CBIC: stock-broking is a taxable service (18%); pure-agent recoveries may fall outside taxable value. GST base (brokerage + NSE txn + SEBI; IPFT excluded) is an estimator assumption pending contract-note confirmation — verify.",
+      "CBIC: stock-broking is a taxable service (18%). GST base (brokerage + NSE txn + IPFT + SEBI) is an estimator assumption following broker contract-note evidence (Zerodha charges page lists NSE IPFT as '₹0.01 per crore + GST'); broker- or account-specific tax treatment can differ — verify against your broker's contract note.",
   },
 };
