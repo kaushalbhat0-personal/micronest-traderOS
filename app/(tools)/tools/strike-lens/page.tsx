@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
+import { ToolCrumbs } from "@/components/layout/tool-crumbs";
+import { ToolSwitcher } from "@/components/tools/tool-switcher";
 import { Callout } from "@/components/ui/callout";
 import { StrikeLensComparison } from "@/features/strike-lens/components/strike-lens-comparison";
 import { parseHandoffParams } from "@/features/strike-lens/validation";
@@ -28,6 +30,11 @@ export default async function StrikeLensPage({
         title="StrikeLens"
         description="Enter a spot price and up to five strikes of the same type. StrikeLens compares moneyness, value split, distance and breakeven — and shows every number behind the comparison."
       />
+
+      <div className="mt-4 space-y-4">
+        <ToolCrumbs toolId="strike-lens" />
+        <ToolSwitcher currentId="strike-lens" />
+      </div>
 
       <div className="mt-8">
         <StrikeLensComparison initialFields={handoff} />

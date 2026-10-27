@@ -1,18 +1,27 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
+import { Field, TextInput } from "@/components/ui/form-field";
+import { Metric } from "@/components/ui/metric";
+import { Receipt, ReceiptDisclaimer, ReceiptRow, ReceiptSection } from "@/components/ui/receipt";
+import { ScenarioRow } from "@/components/ui/scenario-row";
+import { WarningState } from "@/components/ui/warning-state";
 import {
   analyzeGreekMap,
+  GREEK_MAP_DTE_DECIMALS,
   GREEK_MAP_FORMULA_ID,
+  GREEK_MAP_PERCENT_DECIMALS,
+  parseRupeesToPaise,
   type GreekMapResult,
 } from "@/features/greek-map/greek-map";
 import {
   greekMapFieldsSchema,
+  parseDecimalToScaledInt,
   toGreekMapInput,
   type GreekMapHandoffFields,
   type GreekMapRawFields,
@@ -41,6 +50,39 @@ function formatDecimal(value: number, digits: number): string {
   return Number(text) === 0 ? (0).toFixed(digits) : text;
 }
 
+/** Trim trailing zeros from a parsed decimal for the confirmation line. Display only. */
+function trimDecimal(value: number, digits: number): string {
+  return String(Number(value.toFixed(digits)));
+}
+
+/**
+ * Presentation-level parsed confirmations. Each uses the tool's existing
+ * parser — never a second parser — and returns null for empty or unparseable
+ * input so the line disappears naturally. Shown only when the field has no
+ * validation error (the shared Field handles that).
+ */
+function parsedMoneyConfirmation(raw: string): string | null {
+  if (raw.trim() === "") return null;
+  const paise = parseRupeesToPaise(raw);
+  return paise === null ? null : `Parsed as ${formatPaise(paise)}`;
+}
+
+function parsedDteConfirmation(raw: string): string | null {
+  if (raw.trim() === "") return null;
+  const scaled = parseDecimalToScaledInt(raw, GREEK_MAP_DTE_DECIMALS);
+  if (scaled === null) return null;
+  const days = scaled / 10 ** GREEK_MAP_DTE_DECIMALS;
+  return `Parsed as ${trimDecimal(days, GREEK_MAP_DTE_DECIMALS)} days`;
+}
+
+function parsedPercentConfirmation(raw: string): string | null {
+  if (raw.trim() === "") return null;
+  const scaled = parseDecimalToScaledInt(raw, GREEK_MAP_PERCENT_DECIMALS);
+  if (scaled === null) return null;
+  const percent = scaled / 10 ** GREEK_MAP_PERCENT_DECIMALS;
+  return `Parsed as ${trimDecimal(percent, GREEK_MAP_PERCENT_DECIMALS)}%`;
+}
+
 const EMPTY_FIELDS: GreekMapRawFields = {
   optionType: "call",
   spot: "",
@@ -53,52 +95,9 @@ const EMPTY_FIELDS: GreekMapRawFields = {
   expiryLabel: "",
 };
 
-const INPUT_CLASS =
-  "tnum min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-ink placeholder:text-ink-muted/70";
 const LABEL_CLASS = "type-label block text-ink";
 const HINT_CLASS = "type-caption mt-1 text-ink-muted";
 const ERROR_CLASS = "type-caption mt-1 font-medium text-danger";
-
-function Field({
-  id,
-  label,
-  hint,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  error?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className={LABEL_CLASS}>
-        {label}
-      </label>
-      {children}
-      {error ? (
-        <p id={`${id}-error`} className={ERROR_CLASS}>
-          {error}
-        </p>
-      ) : hint ? (
-        <p id={`${id}-hint`} className={HINT_CLASS}>
-          {hint}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function ReceiptRow({ term, value }: { term: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5">
-      <dt className="type-helper text-ink-muted">{term}</dt>
-      <dd className="tnum type-helper shrink-0 text-right text-ink">{value}</dd>
-    </div>
-  );
-}
 
 function GreekRow({ term, value, unit }: { term: string; value: string; unit: string }) {
   return (
@@ -185,222 +184,237 @@ export function GreekMapAnalyzer({
           </div>
         ) : null}
         <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-6">
-          <div>
-            <span id="gm-type-label" className={LABEL_CLASS}>
-              Option type
-            </span>
-            <div
-              role="radiogroup"
-              aria-labelledby="gm-type-label"
-              className="mt-1.5 grid grid-cols-2 gap-2"
-            >
-              {(
-                [
-                  { value: "call", label: "CE (Call)" },
-                  { value: "put", label: "PE (Put)" },
-                ] as const
-              ).map((option) => (
-                <label
-                  key={option.value}
-                  className={`type-label inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 transition-colors ${
-                    fields.optionType === option.value
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-line bg-surface text-ink-muted"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="optionType"
-                    value={option.value}
-                    checked={fields.optionType === option.value}
-                    onChange={() => setField("optionType", option.value)}
-                    className="size-4 accent-[#064e3b]"
-                  />
-                  {option.label}
-                </label>
-              ))}
+          <fieldset className="space-y-4">
+            <legend className="type-eyebrow text-ink-muted">Contract</legend>
+            <div>
+              <span id="gm-type-label" className={LABEL_CLASS}>
+                Option type
+              </span>
+              <div
+                role="radiogroup"
+                aria-labelledby="gm-type-label"
+                className="mt-1.5 grid grid-cols-2 gap-2"
+              >
+                {(
+                  [
+                    { value: "call", label: "CE (Call)" },
+                    { value: "put", label: "PE (Put)" },
+                  ] as const
+                ).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`type-label inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 transition-colors ${
+                      fields.optionType === option.value
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-line bg-surface text-ink-muted"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="optionType"
+                      value={option.value}
+                      checked={fields.optionType === option.value}
+                      onChange={() => setField("optionType", option.value)}
+                      className="size-4 accent-[#064e3b]"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              {errors.optionType ? (
+                <p id="gm-type-error" className={ERROR_CLASS}>
+                  {errors.optionType}
+                </p>
+              ) : (
+                <p id="gm-type-hint" className={HINT_CLASS}>
+                  One option at a time.
+                </p>
+              )}
             </div>
-            {errors.optionType ? (
-              <p id="gm-type-error" className={ERROR_CLASS}>
-                {errors.optionType}
-              </p>
-            ) : (
-              <p id="gm-type-hint" className={HINT_CLASS}>
-                One option at a time.
-              </p>
-            )}
-          </div>
 
-          <div className="grid gap-6 sm:grid-cols-2">
-            <Field
-              id="gm-spot"
-              label="Spot (₹)"
-              hint="The underlying price you want to model."
-              error={errors.spot}
-            >
-              <input
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field
                 id="gm-spot"
-                name="spot"
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="100"
-                value={fields.spot}
-                onChange={(event) => setField("spot", event.target.value)}
-                aria-invalid={Boolean(errors.spot)}
-                aria-describedby={describe("gm-spot", true, Boolean(errors.spot))}
-                className={`${INPUT_CLASS} mt-1.5 ${errors.spot ? "border-danger" : ""}`}
-              />
-            </Field>
+                label="Spot (₹)"
+                hint="The underlying price you want to model."
+                error={errors.spot}
+                confirmation={parsedMoneyConfirmation(fields.spot)}
+              >
+                <TextInput
+                  id="gm-spot"
+                  name="spot"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="100"
+                  prefix="₹"
+                  invalid={Boolean(errors.spot)}
+                  value={fields.spot}
+                  onChange={(event) => setField("spot", event.target.value)}
+                  aria-describedby={describe("gm-spot", true, Boolean(errors.spot))}
+                />
+              </Field>
 
-            <Field
-              id="gm-strike"
-              label="Strike (₹)"
-              hint="The strike you want to model."
-              error={errors.strike}
-            >
-              <input
+              <Field
                 id="gm-strike"
-                name="strike"
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="100"
-                value={fields.strike}
-                onChange={(event) => setField("strike", event.target.value)}
-                aria-invalid={Boolean(errors.strike)}
-                aria-describedby={describe("gm-strike", true, Boolean(errors.strike))}
-                className={`${INPUT_CLASS} mt-1.5 ${errors.strike ? "border-danger" : ""}`}
-              />
-            </Field>
-          </div>
+                label="Strike (₹)"
+                hint="The strike you want to model."
+                error={errors.strike}
+                confirmation={parsedMoneyConfirmation(fields.strike)}
+              >
+                <TextInput
+                  id="gm-strike"
+                  name="strike"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="100"
+                  prefix="₹"
+                  invalid={Boolean(errors.strike)}
+                  value={fields.strike}
+                  onChange={(event) => setField("strike", event.target.value)}
+                  aria-describedby={describe("gm-strike", true, Boolean(errors.strike))}
+                />
+              </Field>
+            </div>
+          </fieldset>
 
-          <Field
-            id="gm-dte"
-            label="Days to expiry"
-            hint="Calendar days, 1–730. Time enters the model as DTE ÷ 365."
-            error={errors.dte}
-          >
-            <input
+          <fieldset className="space-y-4">
+            <legend className="type-eyebrow text-ink-muted">Model inputs</legend>
+            <Field
               id="gm-dte"
-              name="dte"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="30"
-              value={fields.dte}
-              onChange={(event) => setField("dte", event.target.value)}
-              aria-invalid={Boolean(errors.dte)}
-              aria-describedby={describe("gm-dte", true, Boolean(errors.dte))}
-              className={`${INPUT_CLASS} mt-1.5 ${errors.dte ? "border-danger" : ""}`}
-            />
-          </Field>
-
-          <div className="grid gap-6 sm:grid-cols-2">
-            <Field
-              id="gm-volatility"
-              label="Volatility (% per year)"
-              hint="Annual volatility you type in, in percent. 20 means 20%."
-              error={errors.volatility}
+              label="Days to expiry"
+              hint="Calendar days, 1–730. Time enters the model as DTE ÷ 365."
+              error={errors.dte}
+              confirmation={parsedDteConfirmation(fields.dte)}
             >
-              <input
+              <TextInput
+                id="gm-dte"
+                name="dte"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="30"
+                suffix="days"
+                invalid={Boolean(errors.dte)}
+                value={fields.dte}
+                onChange={(event) => setField("dte", event.target.value)}
+                aria-describedby={describe("gm-dte", true, Boolean(errors.dte))}
+              />
+            </Field>
+
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field
                 id="gm-volatility"
-                name="volatility"
+                label="Volatility (% per year)"
+                hint="Annual volatility you type in, in percent. 20 means 20%."
+                error={errors.volatility}
+                confirmation={parsedPercentConfirmation(fields.volatility)}
+              >
+                <TextInput
+                  id="gm-volatility"
+                  name="volatility"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="20"
+                  suffix="%"
+                  invalid={Boolean(errors.volatility)}
+                  value={fields.volatility}
+                  onChange={(event) => setField("volatility", event.target.value)}
+                  aria-describedby={describe("gm-volatility", true, Boolean(errors.volatility))}
+                />
+              </Field>
+
+              <Field
+                id="gm-rate"
+                label="Risk-free rate (% per year)"
+                hint="Annual rate you type in. Type 0 when the assumption is zero."
+                error={errors.rate}
+                confirmation={parsedPercentConfirmation(fields.rate)}
+              >
+                <TextInput
+                  id="gm-rate"
+                  name="rate"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="6"
+                  suffix="%"
+                  invalid={Boolean(errors.rate)}
+                  value={fields.rate}
+                  onChange={(event) => setField("rate", event.target.value)}
+                  aria-describedby={describe("gm-rate", true, Boolean(errors.rate))}
+                />
+              </Field>
+            </div>
+
+            <Field
+              id="gm-dividend"
+              label="Dividend yield (% per year)"
+              hint="Continuous annual yield you type in. Type 0 when the assumption is zero."
+              error={errors.dividend}
+              confirmation={parsedPercentConfirmation(fields.dividend)}
+            >
+              <TextInput
+                id="gm-dividend"
+                name="dividend"
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="20"
-                value={fields.volatility}
-                onChange={(event) => setField("volatility", event.target.value)}
-                aria-invalid={Boolean(errors.volatility)}
-                aria-describedby={describe("gm-volatility", true, Boolean(errors.volatility))}
-                className={`${INPUT_CLASS} mt-1.5 ${errors.volatility ? "border-danger" : ""}`}
+                placeholder="0"
+                suffix="%"
+                invalid={Boolean(errors.dividend)}
+                value={fields.dividend}
+                onChange={(event) => setField("dividend", event.target.value)}
+                aria-describedby={describe("gm-dividend", true, Boolean(errors.dividend))}
+              />
+            </Field>
+          </fieldset>
+
+          <fieldset className="space-y-4">
+            <legend className="type-eyebrow text-ink-muted">Reference (optional)</legend>
+            <Field
+              id="gm-premium"
+              label="Your premium (₹, optional)"
+              hint="Used only for arithmetic comparison with the model value."
+              error={errors.premium}
+              confirmation={parsedMoneyConfirmation(fields.premium)}
+            >
+              <TextInput
+                id="gm-premium"
+                name="premium"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="Optional"
+                prefix="₹"
+                invalid={Boolean(errors.premium)}
+                value={fields.premium}
+                onChange={(event) => setField("premium", event.target.value)}
+                aria-describedby={describe("gm-premium", true, Boolean(errors.premium))}
               />
             </Field>
 
             <Field
-              id="gm-rate"
-              label="Risk-free rate (% per year)"
-              hint="Annual rate you type in. Type 0 when the assumption is zero."
-              error={errors.rate}
+              id="gm-expiry"
+              label="Expiry label (optional)"
+              hint="Display only, e.g. NIFTY 30 OCT. Never enters a calculation."
+              error={errors.expiryLabel}
             >
-              <input
-                id="gm-rate"
-                name="rate"
+              <TextInput
+                id="gm-expiry"
+                name="expiryLabel"
                 type="text"
-                inputMode="decimal"
                 autoComplete="off"
-                placeholder="6"
-                value={fields.rate}
-                onChange={(event) => setField("rate", event.target.value)}
-                aria-invalid={Boolean(errors.rate)}
-                aria-describedby={describe("gm-rate", true, Boolean(errors.rate))}
-                className={`${INPUT_CLASS} mt-1.5 ${errors.rate ? "border-danger" : ""}`}
+                placeholder="Optional"
+                invalid={Boolean(errors.expiryLabel)}
+                value={fields.expiryLabel}
+                onChange={(event) => setField("expiryLabel", event.target.value)}
+                aria-describedby={describe("gm-expiry", true, Boolean(errors.expiryLabel))}
               />
             </Field>
-          </div>
-
-          <Field
-            id="gm-dividend"
-            label="Dividend yield (% per year)"
-            hint="Continuous annual yield you type in. Type 0 when the assumption is zero."
-            error={errors.dividend}
-          >
-            <input
-              id="gm-dividend"
-              name="dividend"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="0"
-              value={fields.dividend}
-              onChange={(event) => setField("dividend", event.target.value)}
-              aria-invalid={Boolean(errors.dividend)}
-              aria-describedby={describe("gm-dividend", true, Boolean(errors.dividend))}
-              className={`${INPUT_CLASS} mt-1.5 ${errors.dividend ? "border-danger" : ""}`}
-            />
-          </Field>
-
-          <Field
-            id="gm-premium"
-            label="Your premium (₹, optional)"
-            hint="Used only for arithmetic comparison with the model value."
-            error={errors.premium}
-          >
-            <input
-              id="gm-premium"
-              name="premium"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="Optional"
-              value={fields.premium}
-              onChange={(event) => setField("premium", event.target.value)}
-              aria-invalid={Boolean(errors.premium)}
-              aria-describedby={describe("gm-premium", true, Boolean(errors.premium))}
-              className={`${INPUT_CLASS} mt-1.5 ${errors.premium ? "border-danger" : ""}`}
-            />
-          </Field>
-
-          <Field
-            id="gm-expiry"
-            label="Expiry label (optional)"
-            hint="Display only, e.g. NIFTY 30 OCT. Never enters a calculation."
-            error={errors.expiryLabel}
-          >
-            <input
-              id="gm-expiry"
-              name="expiryLabel"
-              type="text"
-              autoComplete="off"
-              placeholder="Optional"
-              value={fields.expiryLabel}
-              onChange={(event) => setField("expiryLabel", event.target.value)}
-              aria-invalid={Boolean(errors.expiryLabel)}
-              aria-describedby={describe("gm-expiry", true, Boolean(errors.expiryLabel))}
-              className={`${INPUT_CLASS} mt-1.5 ${errors.expiryLabel ? "border-danger" : ""}`}
-            />
-          </Field>
+          </fieldset>
 
           <Button type="submit" className="w-full sm:w-auto">
             Calculate model
@@ -434,16 +448,13 @@ export function GreekMapAnalyzer({
           <div className="space-y-6">
             <Card>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Badge tone="ok">
+                <Badge tone="neutral">
                   Model calculated · {formatPaise(result.inputs.strikePaise)} {optionLabel}
                 </Badge>
                 <span className="type-caption text-ink-muted">{GREEK_MAP_FORMULA_ID}</span>
               </div>
 
-              <div className="mt-4">
-                <p className="type-eyebrow text-ink-muted">Model value</p>
-                <p className="type-title tnum mt-1">{formatPaise(result.base.pricePaise)}</p>
-              </div>
+              <Metric value={formatPaise(result.base.pricePaise)} caption="Model value" />
 
               <dl className="mt-3 divide-y divide-line border-t border-line">
                 <GreekRow term="Delta" value={formatDecimal(result.base.delta, 4)} unit="per ₹1" />
@@ -472,13 +483,7 @@ export function GreekMapAnalyzer({
               {result.warnings.length > 0 ? (
                 <div className="mt-4 space-y-2">
                   {result.warnings.map((warning) => (
-                    <div
-                      key={warning.code}
-                      role="alert"
-                      className="rounded-lg border border-warn/30 bg-warn/5 p-3"
-                    >
-                      <p className="type-helper font-medium text-warn-strong">{warning.message}</p>
-                    </div>
+                    <WarningState key={warning.code} message={warning.message} />
                   ))}
                 </div>
               ) : null}
@@ -506,22 +511,24 @@ export function GreekMapAnalyzer({
                 </div>
               ) : null}
 
-              <details className="mt-4 rounded-lg border border-line bg-surface-muted/50 px-4 py-2">
-                <summary className="type-label inline-flex min-h-11 cursor-pointer items-center text-ink">
-                  Calculation receipt · {GREEK_MAP_FORMULA_ID}
-                </summary>
-                <dl className="divide-y divide-line border-t border-line pb-2">
-                  <ReceiptRow
-                    term="MicroNest model"
-                    value="Black-Scholes-Merton with continuous dividend yield"
-                  />
-                  <ReceiptRow term="Exercise" value="European (exercise at expiry only)" />
+              <Receipt summary={`Calculation receipt · ${GREEK_MAP_FORMULA_ID}`}>
+                <ReceiptSection title="Inputs">
                   <ReceiptRow
                     term="Option type"
                     value={result.inputs.optionType === "call" ? "CE (Call)" : "PE (Put)"}
                   />
                   <ReceiptRow term="Spot" value={formatPaise(result.inputs.spotPaise)} />
                   <ReceiptRow term="Strike" value={formatPaise(result.inputs.strikePaise)} />
+                  {result.inputs.expiryLabel !== undefined ? (
+                    <ReceiptRow term="Expiry label" value={result.inputs.expiryLabel} />
+                  ) : null}
+                </ReceiptSection>
+                <ReceiptSection title="Method">
+                  <ReceiptRow
+                    term="MicroNest model"
+                    value="Black-Scholes-Merton with continuous dividend yield"
+                  />
+                  <ReceiptRow term="Exercise" value="European (exercise at expiry only)" />
                   <ReceiptRow term="Call price" value="S·e^(−qT)·N(d1) − K·e^(−rT)·N(d2)" />
                   <ReceiptRow term="Put price" value="K·e^(−rT)·N(−d2) − S·e^(−qT)·N(−d1)" />
                   <ReceiptRow
@@ -557,25 +564,24 @@ export function GreekMapAnalyzer({
                     term="Time scenarios"
                     value="−1/−3/−7 days on DTE; under the 1-day floor rows are omitted"
                   />
-                  {result.inputs.expiryLabel !== undefined ? (
-                    <ReceiptRow term="Expiry label" value={result.inputs.expiryLabel} />
-                  ) : null}
+                  <ReceiptRow term="IV solver" value="None: no volatility is implied" />
+                </ReceiptSection>
+                <ReceiptSection title="Rounding">
                   <ReceiptRow term="Rounding" value={result.rounding} />
                   <ReceiptRow
                     term="Numerical rule"
                     value="A non-finite result is blocked as invalid_input, never shown"
                   />
-                  <ReceiptRow term="IV solver" value="None: no volatility is implied" />
-                </dl>
-                <p className="type-caption pb-2 text-ink-muted">
+                </ReceiptSection>
+                <ReceiptDisclaimer>
                   MicroNest model: Black-Scholes-Merton with continuous dividend yield. This is a
                   user-assumption model illustration and is not an NSE settlement or exchange
                   pricing calculation. Inputs are typed by you — unverified, not real-time. The
                   model value is not a prediction of where the option will trade, and scenarios are
                   not forecasts. American exercise, discrete dividends and changing inputs sit
                   outside this model. Not investment advice.
-                </p>
-              </details>
+                </ReceiptDisclaimer>
+              </Receipt>
             </Card>
 
             <Card as="section" aria-labelledby="greek-map-spot-heading">
@@ -587,19 +593,14 @@ export function GreekMapAnalyzer({
               </p>
               <div className="mt-4 space-y-4">
                 {result.spotScenarios.map((row) => (
-                  <article
+                  <ScenarioRow
                     key={row.scenarioPct}
-                    aria-label={`Spot ${row.scenarioPct}% scenario`}
-                    className="rounded-lg border border-line bg-surface-muted/40 p-4"
+                    label={`Spot ${row.scenarioPct > 0 ? `+${row.scenarioPct}%` : `${row.scenarioPct}%`} · ${formatPaise(row.spotPaise)}`}
+                    ariaLabel={`Spot ${row.scenarioPct}% scenario`}
+                    headingLevel="h4"
+                    markers={row.isBase ? [{ text: "Your inputs", tone: "primary" }] : []}
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="type-label tnum text-ink">
-                        Spot {row.scenarioPct > 0 ? `+${row.scenarioPct}%` : `${row.scenarioPct}%`}{" "}
-                        · {formatPaise(row.spotPaise)}
-                      </h4>
-                      {row.isBase ? <Badge tone="primary">Your inputs</Badge> : null}
-                    </div>
-                    <dl className="mt-2 divide-y divide-line border-t border-line">
+                    <dl className="divide-y divide-line border-t border-line">
                       <ReceiptRow term="Model value" value={formatPaise(row.pricePaise)} />
                       <GreekRow term="Delta" value={formatDecimal(row.delta, 4)} unit="per ₹1" />
                       <GreekRow term="Gamma" value={formatDecimal(row.gamma, 6)} unit="per ₹1" />
@@ -614,7 +615,7 @@ export function GreekMapAnalyzer({
                         unit="₹ / 1pp IV"
                       />
                     </dl>
-                  </article>
+                  </ScenarioRow>
                 ))}
               </div>
             </Card>
@@ -628,20 +629,15 @@ export function GreekMapAnalyzer({
               </p>
               <div className="mt-4 space-y-4">
                 {result.timeScenarios.map((row) => (
-                  <article
+                  <ScenarioRow
                     key={row.minusDays}
-                    aria-label={`Minus ${row.minusDays} day scenario`}
-                    className="rounded-lg border border-line bg-surface-muted/40 p-4"
+                    label={`−${row.minusDays} ${row.minusDays === 1 ? "day" : "days"}`}
+                    ariaLabel={`Minus ${row.minusDays} day scenario`}
+                    headingLevel="h4"
+                    note={row.omitted ? "omitted — V1 has a 1-day DTE floor" : undefined}
                   >
-                    <h4 className="type-label text-ink">
-                      −{row.minusDays} {row.minusDays === 1 ? "day" : "days"}
-                    </h4>
-                    {row.omitted ? (
-                      <p className="type-helper mt-2 text-ink-muted">
-                        omitted — V1 has a 1-day DTE floor
-                      </p>
-                    ) : (
-                      <dl className="mt-2 divide-y divide-line border-t border-line">
+                    {row.omitted ? null : (
+                      <dl className="divide-y divide-line border-t border-line">
                         <ReceiptRow term="Model value" value={formatPaise(row.pricePaise)} />
                         <GreekRow
                           term="Theta"
@@ -650,7 +646,7 @@ export function GreekMapAnalyzer({
                         />
                       </dl>
                     )}
-                  </article>
+                  </ScenarioRow>
                 ))}
               </div>
             </Card>

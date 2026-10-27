@@ -6,7 +6,7 @@ A lightweight, mobile-first decision-support toolkit for Indian retail traders. 
 microtools for planning, sizing, analysing and reviewing trades — calculations and structure,
 not signals.
 
-**Status: Phase 0 — foundation complete. No trading tool is implemented yet.**
+**Status: Pre-deployment — foundation, five live tools (RiskGuard, TradePlan, TradeCost, StrikeLens, GreekMap) and premium UI Phases 0–5 complete.**
 
 ---
 

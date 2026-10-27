@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
+import { ToolCrumbs } from "@/components/layout/tool-crumbs";
+import { ToolSwitcher } from "@/components/tools/tool-switcher";
 import { Callout } from "@/components/ui/callout";
 import { RiskGuardCalculator } from "@/features/risk-guard/components/risk-guard-calculator";
 import { parseHandoffParams } from "@/features/risk-guard/validation";
@@ -28,6 +30,11 @@ export default async function RiskGuardPage({
         title="RiskGuard"
         description="Enter your capital, risk %, direction, entry, stop and lot size. RiskGuard checks whether the trade fits your own risk budget and shows every number behind the decision."
       />
+
+      <div className="mt-4 space-y-4">
+        <ToolCrumbs toolId="risk-guard" />
+        <ToolSwitcher currentId="risk-guard" />
+      </div>
 
       <div className="mt-8">
         <RiskGuardCalculator initialFields={handoff} />

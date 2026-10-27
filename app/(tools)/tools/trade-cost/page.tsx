@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
+import { ToolCrumbs } from "@/components/layout/tool-crumbs";
+import { ToolSwitcher } from "@/components/tools/tool-switcher";
 import { Callout } from "@/components/ui/callout";
 import { TradeCostCalculator } from "@/features/trade-cost/components/trade-cost-calculator";
 import { parseHandoffParams } from "@/features/trade-cost/validation";
@@ -28,6 +30,11 @@ export default async function TradeCostPage({
         title="TradeCost"
         description="Enter your buy and sell prices, quantity and brokerage assumption. TradeCost estimates gross P&L, every transaction charge, net P&L and the breakeven exit — and shows every number behind the estimate."
       />
+
+      <div className="mt-4 space-y-4">
+        <ToolCrumbs toolId="trade-cost" />
+        <ToolSwitcher currentId="trade-cost" />
+      </div>
 
       <div className="mt-8">
         <TradeCostCalculator initialFields={handoff} />

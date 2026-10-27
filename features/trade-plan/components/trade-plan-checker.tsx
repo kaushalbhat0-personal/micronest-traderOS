@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
+import { Field, TextInput } from "@/components/ui/form-field";
+import { Metric } from "@/components/ui/metric";
+import { Receipt, ReceiptDisclaimer, ReceiptRow, ReceiptSection } from "@/components/ui/receipt";
 import {
   checkPlan,
+  parseRupeesToPaise,
   type TradePlanIncoherent,
   type TradePlanResult,
 } from "@/features/trade-plan/trade-plan";
@@ -29,6 +33,18 @@ function formatPaise(paise: number): string {
   return inrExact.format(paise / 100);
 }
 
+/**
+ * Presentation-level parsed confirmation. Uses the tool's existing domain
+ * parser — never a second parser — and returns null for empty or unparseable
+ * input so the line disappears naturally. Shown only when the field has no
+ * validation error (the shared Field handles that).
+ */
+function parsedMoneyConfirmation(raw: string): string | null {
+  if (raw.trim() === "") return null;
+  const paise = parseRupeesToPaise(raw);
+  return paise === null ? null : `Parsed as ${formatPaise(paise)}`;
+}
+
 const EMPTY_FIELDS: TradePlanRawFields = {
   direction: "long",
   entry: "",
@@ -40,54 +56,8 @@ const EMPTY_FIELDS: TradePlanRawFields = {
   notes: "",
 };
 
-const INPUT_CLASS =
-  "tnum min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-ink placeholder:text-ink-muted/70";
 const TEXTAREA_CLASS =
   "min-h-11 w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-ink placeholder:text-ink-muted/70";
-const LABEL_CLASS = "type-label block text-ink";
-const HINT_CLASS = "type-caption mt-1 text-ink-muted";
-const ERROR_CLASS = "type-caption mt-1 font-medium text-danger";
-
-function Field({
-  id,
-  label,
-  hint,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  error?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className={LABEL_CLASS}>
-        {label}
-      </label>
-      {children}
-      {error ? (
-        <p id={`${id}-error`} className={ERROR_CLASS}>
-          {error}
-        </p>
-      ) : hint ? (
-        <p id={`${id}-hint`} className={HINT_CLASS}>
-          {hint}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function ReceiptRow({ term, value }: { term: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5">
-      <dt className="type-helper text-ink-muted">{term}</dt>
-      <dd className="tnum type-helper shrink-0 text-right text-ink">{value}</dd>
-    </div>
-  );
-}
 
 function IncoherentDetails({ result }: { result: TradePlanIncoherent }) {
   return (
@@ -162,7 +132,7 @@ export function TradePlanChecker() {
           <fieldset className="space-y-4">
             <legend className="type-eyebrow text-ink-muted">01 · Setup — what and why</legend>
             <div>
-              <span id="tp-direction-label" className={LABEL_CLASS}>
+              <span id="tp-direction-label" className="type-label block text-ink">
                 Direction
               </span>
               <div
@@ -197,7 +167,7 @@ export function TradePlanChecker() {
                 ))}
               </div>
               {errors.direction ? (
-                <p id="tp-direction-error" className={ERROR_CLASS}>
+                <p id="tp-direction-error" className="type-caption mt-1 font-medium text-danger">
                   {errors.direction}
                 </p>
               ) : null}
@@ -219,7 +189,7 @@ export function TradePlanChecker() {
                 onChange={(event) => setField("setupName", event.target.value)}
                 aria-invalid={Boolean(errors.setupName)}
                 aria-describedby={describe("tp-setup", true, Boolean(errors.setupName))}
-                className={`${INPUT_CLASS} mt-1.5 ${errors.setupName ? "border-danger" : ""}`}
+                className={`tnum mt-1.5 min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-ink placeholder:text-ink-muted/70 ${errors.setupName ? "border-danger focus-visible:outline-danger" : ""}`}
               />
             </Field>
             <Field
@@ -238,7 +208,7 @@ export function TradePlanChecker() {
                 onChange={(event) => setField("thesis", event.target.value)}
                 aria-invalid={Boolean(errors.thesis)}
                 aria-describedby={describe("tp-thesis", true, Boolean(errors.thesis))}
-                className={`${TEXTAREA_CLASS} mt-1.5 ${errors.thesis ? "border-danger" : ""}`}
+                className={`${TEXTAREA_CLASS} mt-1.5 ${errors.thesis ? "border-danger focus-visible:outline-danger" : ""}`}
               />
             </Field>
             <Field
@@ -257,7 +227,7 @@ export function TradePlanChecker() {
                 onChange={(event) => setField("invalidation", event.target.value)}
                 aria-invalid={Boolean(errors.invalidation)}
                 aria-describedby={describe("tp-invalidation", true, Boolean(errors.invalidation))}
-                className={`${TEXTAREA_CLASS} mt-1.5 ${errors.invalidation ? "border-danger" : ""}`}
+                className={`${TEXTAREA_CLASS} mt-1.5 ${errors.invalidation ? "border-danger focus-visible:outline-danger" : ""}`}
               />
             </Field>
           </fieldset>
@@ -272,19 +242,20 @@ export function TradePlanChecker() {
                 label="Entry (₹)"
                 hint="Your planned entry price."
                 error={errors.entry}
+                confirmation={parsedMoneyConfirmation(fields.entry)}
               >
-                <input
+                <TextInput
                   id="tp-entry"
                   name="entry"
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
                   placeholder="100"
+                  prefix="₹"
+                  invalid={Boolean(errors.entry)}
                   value={fields.entry}
                   onChange={(event) => setField("entry", event.target.value)}
-                  aria-invalid={Boolean(errors.entry)}
                   aria-describedby={describe("tp-entry", true, Boolean(errors.entry))}
-                  className={`${INPUT_CLASS} mt-1.5 ${errors.entry ? "border-danger" : ""}`}
                 />
               </Field>
               <Field
@@ -292,19 +263,20 @@ export function TradePlanChecker() {
                 label="Stop-loss (₹)"
                 hint="Below entry for long, above for short."
                 error={errors.stop}
+                confirmation={parsedMoneyConfirmation(fields.stop)}
               >
-                <input
+                <TextInput
                   id="tp-stop"
                   name="stop"
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
                   placeholder="95"
+                  prefix="₹"
+                  invalid={Boolean(errors.stop)}
                   value={fields.stop}
                   onChange={(event) => setField("stop", event.target.value)}
-                  aria-invalid={Boolean(errors.stop)}
                   aria-describedby={describe("tp-stop", true, Boolean(errors.stop))}
-                  className={`${INPUT_CLASS} mt-1.5 ${errors.stop ? "border-danger" : ""}`}
                 />
               </Field>
             </div>
@@ -313,19 +285,20 @@ export function TradePlanChecker() {
               label="Target (₹)"
               hint="Leave blank if you have no target. R:R is only shown with a target."
               error={errors.target}
+              confirmation={parsedMoneyConfirmation(fields.target)}
             >
-              <input
+              <TextInput
                 id="tp-target"
                 name="target"
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
                 placeholder="Optional"
+                prefix="₹"
+                invalid={Boolean(errors.target)}
                 value={fields.target}
                 onChange={(event) => setField("target", event.target.value)}
-                aria-invalid={Boolean(errors.target)}
                 aria-describedby={describe("tp-target", true, Boolean(errors.target))}
-                className={`${INPUT_CLASS} mt-1.5 ${errors.target ? "border-danger" : ""}`}
               />
             </Field>
             <Field
@@ -344,7 +317,7 @@ export function TradePlanChecker() {
                 onChange={(event) => setField("notes", event.target.value)}
                 aria-invalid={Boolean(errors.notes)}
                 aria-describedby={describe("tp-notes", true, Boolean(errors.notes))}
-                className={`${TEXTAREA_CLASS} mt-1.5 ${errors.notes ? "border-danger" : ""}`}
+                className={`${TEXTAREA_CLASS} mt-1.5 ${errors.notes ? "border-danger focus-visible:outline-danger" : ""}`}
               />
             </Field>
           </fieldset>
@@ -376,27 +349,22 @@ export function TradePlanChecker() {
             </div>
             <h3 className="type-subtitle mt-4">03 · Risk / reward</h3>
             {result.riskRewardRatio !== null && result.rewardPerUnitPaise !== null ? (
-              <p className="type-metric tnum mt-1">
-                {result.riskRewardRatio.toFixed(2)}{" "}
-                <span className="type-helper text-ink-muted">
-                  reward : risk · {formatPaise(result.rewardPerUnitPaise)} reward per unit
-                </span>
-              </p>
+              <Metric
+                value={result.riskRewardRatio.toFixed(2)}
+                supporting={`reward : risk · ${formatPaise(result.rewardPerUnitPaise)} reward per unit`}
+              />
             ) : (
-              <p className="type-metric tnum mt-1">
-                {formatPaise(result.riskPerUnitPaise)}{" "}
-                <span className="type-helper text-ink-muted">
-                  risk per unit · no target, so no R:R
-                </span>
-              </p>
+              <Metric
+                value={formatPaise(result.riskPerUnitPaise)}
+                supporting="risk per unit · no target, so no R:R"
+              />
             )}
             <dl className="mt-4 divide-y divide-line border-t border-line">
               <ReceiptRow term="Direction" value={result.inputs.direction} />
               <ReceiptRow term="Entry" value={formatPaise(result.inputs.entryPaise)} />
               <ReceiptRow term="Stop-loss" value={formatPaise(result.inputs.stopPaise)} />
               <ReceiptRow term="Per-unit risk" value={formatPaise(result.riskPerUnitPaise)} />
-              {result.inputs.targetPaise !== undefined &&
-              result.rewardPerUnitPaise !== null ? (
+              {result.inputs.targetPaise !== undefined && result.rewardPerUnitPaise !== null ? (
                 <>
                   <ReceiptRow term="Target" value={formatPaise(result.inputs.targetPaise)} />
                   <ReceiptRow
@@ -415,26 +383,22 @@ export function TradePlanChecker() {
             </p>
             <h3 className="type-subtitle mt-5">Next decision</h3>
             <p className="type-helper mt-1.5 text-ink-muted">
-              A coherent plan is not automatically a responsibly sized one. RiskGuard will now
-              check how much you can take under your own risk constraint.
+              A coherent plan is not automatically a responsibly sized one. RiskGuard will now check
+              how much you can take under your own risk constraint.
             </p>
-            <a
-              href={handoffHref()}
-              className={buttonClasses("primary", "mt-3 w-full sm:w-auto")}
-            >
+            <a href={handoffHref()} className={buttonClasses("primary", "mt-3 w-full sm:w-auto")}>
               Size this trade in RiskGuard
             </a>
-            <details className="mt-4 rounded-lg border border-line bg-surface-muted/50 px-4 py-2">
-              <summary className="type-label inline-flex min-h-11 cursor-pointer items-center text-ink">
-                05 · Plan receipt · TP-001
-              </summary>
-              <dl className="divide-y divide-line border-t border-line pb-2">
+            <Receipt summary="05 · Plan receipt · TP-001">
+              <ReceiptSection title="Inputs">
                 <ReceiptRow term="Setup" value={result.inputs.setupName} />
                 <ReceiptRow term="Thesis" value={result.inputs.thesis} />
                 <ReceiptRow term="Invalidation" value={result.inputs.invalidation} />
                 {result.inputs.notes !== undefined ? (
                   <ReceiptRow term="Notes" value={result.inputs.notes} />
                 ) : null}
+              </ReceiptSection>
+              <ReceiptSection title="Outputs">
                 <ReceiptRow term="Risk per unit" value={formatPaise(result.riskPerUnitPaise)} />
                 <ReceiptRow
                   term="Reward per unit"
@@ -452,12 +416,14 @@ export function TradePlanChecker() {
                       : "Not calculated — no target"
                   }
                 />
+              </ReceiptSection>
+              <ReceiptSection title="Rounding">
                 <ReceiptRow term="Rounding" value={result.rounding} />
-              </dl>
-              <p className="type-caption pb-2 text-ink-muted">
+              </ReceiptSection>
+              <ReceiptDisclaimer>
                 Charges and slippage are excluded. Verify with your broker. Not investment advice.
-              </p>
-            </details>
+              </ReceiptDisclaimer>
+            </Receipt>
           </Card>
         ) : (
           <Card>
@@ -468,21 +434,20 @@ export function TradePlanChecker() {
             <h3 className="type-subtitle mt-4">04 · Decision check</h3>
             <p className="type-body mt-1.5">{result.reason}</p>
             <IncoherentDetails result={result} />
-            <details className="mt-4 rounded-lg border border-line bg-surface-muted/50 px-4 py-2">
-              <summary className="type-label inline-flex min-h-11 cursor-pointer items-center text-ink">
-                05 · Plan receipt · TP-001
-              </summary>
-              <dl className="divide-y divide-line border-t border-line pb-2">
+            <Receipt summary="05 · Plan receipt · TP-001">
+              <ReceiptSection title="Inputs">
                 <ReceiptRow term="Setup" value={result.inputs.setupName} />
                 <ReceiptRow term="Direction" value={result.inputs.direction} />
                 <ReceiptRow term="Entry" value={formatPaise(result.inputs.entryPaise)} />
                 <ReceiptRow term="Stop-loss" value={formatPaise(result.inputs.stopPaise)} />
+              </ReceiptSection>
+              <ReceiptSection title="Rounding">
                 <ReceiptRow term="Rounding" value={result.rounding} />
-              </dl>
-              <p className="type-caption pb-2 text-ink-muted">
+              </ReceiptSection>
+              <ReceiptDisclaimer>
                 Charges and slippage are excluded. Verify with your broker. Not investment advice.
-              </p>
-            </details>
+              </ReceiptDisclaimer>
+            </Receipt>
           </Card>
         )}
         <Callout title="Understand your trade before taking it" className="mt-6">

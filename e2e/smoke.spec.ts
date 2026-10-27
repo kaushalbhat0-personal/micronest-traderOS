@@ -78,7 +78,9 @@ test("tools index lists all ten tools with honest statuses", async ({ page }) =>
   }
 
   await expect(page.getByText("Coming soon")).toHaveCount(0);
-  await expect(page.getByText("Planned")).toHaveCount(5);
+  // Exact match: the page description now also states the registry counts in
+  // prose, so only the status badges themselves may be counted here.
+  await expect(page.getByText("Planned", { exact: true })).toHaveCount(5);
   await expect(page.getByText("Live", { exact: true })).toHaveCount(5);
 });
 

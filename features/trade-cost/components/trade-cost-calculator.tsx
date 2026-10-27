@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
+import { Field, TextInput } from "@/components/ui/form-field";
+import { Metric } from "@/components/ui/metric";
+import { Receipt, ReceiptDisclaimer, ReceiptRow, ReceiptSection } from "@/components/ui/receipt";
 import { COST_RATE_SET } from "@/config/cost-rates";
 import {
   calculateCosts,
@@ -37,6 +40,18 @@ function formatCount(value: number): string {
   return value.toLocaleString("en-IN");
 }
 
+/**
+ * Presentation-level parsed confirmation. Uses the tool's existing domain
+ * parser — never a second parser — and returns null for empty or unparseable
+ * input so the line disappears naturally. Shown only when the field has no
+ * validation error (the shared Field handles that).
+ */
+function parsedMoneyConfirmation(raw: string): string | null {
+  if (raw.trim() === "") return null;
+  const paise = parseRupeesToPaise(raw);
+  return paise === null ? null : `Parsed as ${formatPaise(paise)}`;
+}
+
 const EMPTY_FIELDS: TradeCostRawFields = {
   direction: "long",
   mode: "delivery",
@@ -46,43 +61,8 @@ const EMPTY_FIELDS: TradeCostRawFields = {
   brokerage: "",
 };
 
-const INPUT_CLASS =
-  "tnum min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-ink placeholder:text-ink-muted/70";
 const LABEL_CLASS = "type-label block text-ink";
-const HINT_CLASS = "type-caption mt-1 text-ink-muted";
 const ERROR_CLASS = "type-caption mt-1 font-medium text-danger";
-
-function Field({
-  id,
-  label,
-  hint,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  error?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className={LABEL_CLASS}>
-        {label}
-      </label>
-      {children}
-      {error ? (
-        <p id={`${id}-error`} className={ERROR_CLASS}>
-          {error}
-        </p>
-      ) : hint ? (
-        <p id={`${id}-hint`} className={HINT_CLASS}>
-          {hint}
-        </p>
-      ) : null}
-    </div>
-  );
-}
 
 function RadioGroup<T extends string>({
   id,
@@ -104,7 +84,11 @@ function RadioGroup<T extends string>({
       <span id={`${id}-label`} className={LABEL_CLASS}>
         {label}
       </span>
-      <div role="radiogroup" aria-labelledby={`${id}-label`} className="mt-1.5 grid grid-cols-2 gap-2">
+      <div
+        role="radiogroup"
+        aria-labelledby={`${id}-label`}
+        className="mt-1.5 grid grid-cols-2 gap-2"
+      >
         {options.map((option) => (
           <label
             key={option.value}
@@ -131,15 +115,6 @@ function RadioGroup<T extends string>({
           {error}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-function ReceiptRow({ term, value }: { term: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5">
-      <dt className="type-helper text-ink-muted">{term}</dt>
-      <dd className="tnum type-helper shrink-0 text-right text-ink">{value}</dd>
     </div>
   );
 }
@@ -273,8 +248,8 @@ export function TradeCostCalculator({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Badge tone="neutral">From your RiskGuard sizing</Badge>
             <p className="type-caption text-ink-muted">
-              Carried forward for you — review or change anything. TradeCost calculates from what
-              is in this form.
+              Carried forward for you — review or change anything. TradeCost calculates from what is
+              in this form.
             </p>
           </div>
         ) : null}
@@ -313,19 +288,20 @@ export function TradeCostCalculator({
                 label="Buy price (₹)"
                 hint="Your buy price per share."
                 error={errors.buyPrice}
+                confirmation={parsedMoneyConfirmation(fields.buyPrice)}
               >
-                <input
+                <TextInput
                   id="tc-buy"
                   name="buyPrice"
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
                   placeholder="100"
+                  prefix="₹"
+                  invalid={Boolean(errors.buyPrice)}
                   value={fields.buyPrice}
                   onChange={(event) => setField("buyPrice", event.target.value)}
-                  aria-invalid={Boolean(errors.buyPrice)}
                   aria-describedby={describe("tc-buy", true, Boolean(errors.buyPrice))}
-                  className={`${INPUT_CLASS} mt-1.5 ${errors.buyPrice ? "border-danger" : ""}`}
                 />
               </Field>
               <Field
@@ -333,19 +309,20 @@ export function TradeCostCalculator({
                 label="Sell price (₹)"
                 hint="Your sell or expected exit price."
                 error={errors.sellPrice}
+                confirmation={parsedMoneyConfirmation(fields.sellPrice)}
               >
-                <input
+                <TextInput
                   id="tc-sell"
                   name="sellPrice"
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
                   placeholder="110"
+                  prefix="₹"
+                  invalid={Boolean(errors.sellPrice)}
                   value={fields.sellPrice}
                   onChange={(event) => setField("sellPrice", event.target.value)}
-                  aria-invalid={Boolean(errors.sellPrice)}
                   aria-describedby={describe("tc-sell", true, Boolean(errors.sellPrice))}
-                  className={`${INPUT_CLASS} mt-1.5 ${errors.sellPrice ? "border-danger" : ""}`}
                 />
               </Field>
             </div>
@@ -355,18 +332,17 @@ export function TradeCostCalculator({
               hint="Shares carried from your RiskGuard sizing, or your own number."
               error={errors.quantity}
             >
-              <input
+              <TextInput
                 id="tc-quantity"
                 name="quantity"
                 type="text"
                 inputMode="numeric"
                 autoComplete="off"
                 placeholder="100"
+                invalid={Boolean(errors.quantity)}
                 value={fields.quantity}
                 onChange={(event) => setField("quantity", event.target.value)}
-                aria-invalid={Boolean(errors.quantity)}
                 aria-describedby={describe("tc-quantity", true, Boolean(errors.quantity))}
-                className={`${INPUT_CLASS} mt-1.5 ${errors.quantity ? "border-danger" : ""}`}
               />
             </Field>
           </fieldset>
@@ -378,19 +354,20 @@ export function TradeCostCalculator({
               label="Brokerage total (₹)"
               hint="Both legs together, from your broker. Enter 0 when none is assumed."
               error={errors.brokerage}
+              confirmation={parsedMoneyConfirmation(fields.brokerage)}
             >
-              <input
+              <TextInput
                 id="tc-brokerage"
                 name="brokerage"
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
                 placeholder="40"
+                prefix="₹"
+                invalid={Boolean(errors.brokerage)}
                 value={fields.brokerage}
                 onChange={(event) => setField("brokerage", event.target.value)}
-                aria-invalid={Boolean(errors.brokerage)}
                 aria-describedby={describe("tc-brokerage", true, Boolean(errors.brokerage))}
-                className={`${INPUT_CLASS} mt-1.5 ${errors.brokerage ? "border-danger" : ""}`}
               />
             </Field>
             <p className="type-caption text-ink-muted">
@@ -422,13 +399,13 @@ export function TradeCostCalculator({
         ) : result.status === "computed" ? (
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Badge tone={result.netPnlPaise >= 0 ? "ok" : "danger"}>
+              <Badge tone="neutral">
                 {result.netPnlPaise >= 0 ? "Survives costs" : "Eaten by costs"}
               </Badge>
               <span className="type-caption text-ink-muted">TC-001</span>
             </div>
             <h3 className="type-subtitle mt-4">Net P&L</h3>
-            <p className="type-metric tnum mt-1">{formatPaise(result.netPnlPaise)}</p>
+            <Metric value={formatPaise(result.netPnlPaise)} />
             <p className="type-body mt-3">{result.verdict}</p>
             {result.breakeven.status === "ok" ? (
               <p className="type-helper mt-1.5 text-ink-muted">
@@ -450,11 +427,8 @@ export function TradeCostCalculator({
                 </div>
               </div>
             ) : null}
-            <details className="mt-4 rounded-lg border border-line bg-surface-muted/50 px-4 py-2">
-              <summary className="type-label inline-flex min-h-11 cursor-pointer items-center text-ink">
-                Calculation receipt · TC-001
-              </summary>
-              <dl className="divide-y divide-line border-t border-line pb-2">
+            <Receipt summary="Calculation receipt · TC-001">
+              <ReceiptSection title="Inputs">
                 <ReceiptRow term="Direction" value={result.inputs.direction} />
                 <ReceiptRow
                   term="Segment"
@@ -468,23 +442,33 @@ export function TradeCostCalculator({
                 <ReceiptRow term="Sell turnover" value={formatPaise(result.turnoverSellPaise)} />
                 <ReceiptRow term="Rate set" value={result.rateSetId} />
                 <ReceiptRow term="Effective from" value={result.effectiveFrom} />
+              </ReceiptSection>
+              <ReceiptSection title="Rounding">
                 <ReceiptRow term="Rounding" value={result.rounding} />
-              </dl>
-              <p className="type-caption pb-1 text-ink-muted">
-                NSE cash market only (NSE/FA/73061, 1-Mar-2026). STT per Finance Act schedule;
-                stamp duty per Indian Stamp Act; SEBI fee per current schedule; GST 18% on
-                brokerage + NSE txn + IPFT + SEBI (estimator assumption following broker
-                contract-note evidence — broker-specific treatment can differ).
-              </p>
-              <p className="type-caption pb-1 text-ink-muted">
-                Excluded: DP charges, slippage, penalties, account fees.
-              </p>
-              <p className="type-caption pb-2 text-ink-muted">
+              </ReceiptSection>
+              <ReceiptSection title="Method">
+                <ReceiptRow
+                  term="Charge basis"
+                  value="NSE cash market only (NSE/FA/73061, 1-Mar-2026)"
+                />
+                <ReceiptRow
+                  term="Statutory basis"
+                  value="STT per Finance Act schedule; stamp duty per Indian Stamp Act; SEBI fee per current schedule"
+                />
+                <ReceiptRow
+                  term="GST basis"
+                  value="18% on brokerage + NSE txn + IPFT + SEBI — estimator assumption following broker contract-note evidence; broker-specific treatment can differ"
+                />
+              </ReceiptSection>
+              <ReceiptSection title="Limits">
+                <ReceiptRow term="Excluded" value="DP charges, slippage, penalties, account fees" />
+              </ReceiptSection>
+              <ReceiptDisclaimer>
                 Estimated transaction costs from rate set {result.rateSetId} and your brokerage
                 assumption. Rounding may differ from your broker&apos;s contract note by a few
                 paise. Verify before trading. Not investment advice.
-              </p>
-            </details>
+              </ReceiptDisclaimer>
+            </Receipt>
           </Card>
         ) : (
           <Card>
@@ -499,8 +483,8 @@ export function TradeCostCalculator({
           </Card>
         )}
         <Callout title="Understand your trade before taking it" className="mt-6">
-          TradeCost estimates the consequences of the numbers you enter. It does not predict
-          profit, guarantee costs, or recommend trades.
+          TradeCost estimates the consequences of the numbers you enter. It does not predict profit,
+          guarantee costs, or recommend trades.
         </Callout>
       </section>
     </div>

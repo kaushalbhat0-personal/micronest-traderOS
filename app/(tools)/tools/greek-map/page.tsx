@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
+import { ToolCrumbs } from "@/components/layout/tool-crumbs";
+import { ToolSwitcher } from "@/components/tools/tool-switcher";
 import { Callout } from "@/components/ui/callout";
 import { GreekMapAnalyzer } from "@/features/greek-map/components/greek-map-analyzer";
 import { parseHandoffParams } from "@/features/greek-map/validation";
@@ -28,6 +30,11 @@ export default async function GreekMapPage({
         title="GreekMap"
         description="Type one option's price inputs and see its model price and Greeks, plus fixed spot and time scenarios. GreekMap illustrates your assumptions — it never judges a strike or a strategy."
       />
+
+      <div className="mt-4 space-y-4">
+        <ToolCrumbs toolId="greek-map" />
+        <ToolSwitcher currentId="greek-map" />
+      </div>
 
       <div className="mt-8">
         <GreekMapAnalyzer initialFields={handoff} />

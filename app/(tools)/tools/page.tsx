@@ -4,7 +4,7 @@ import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import { ToolGrid } from "@/components/tools/tool-grid";
 import { Callout } from "@/components/ui/callout";
-import { TOOL_GROUPS } from "@/config/tools";
+import { TOOLS, TOOL_GROUPS, statusCounts } from "@/config/tools";
 
 export const metadata: Metadata = {
   title: "Tools",
@@ -16,13 +16,17 @@ const JUMP_LINK_CLASS =
   "type-label inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-ink transition-colors hover:bg-surface-muted";
 
 export default function ToolsPage() {
+  const counts = statusCounts();
+  const segments = [
+    counts.live > 0 ? `${counts.live} live` : null,
+    counts.coming_soon > 0 ? `${counts.coming_soon} in development` : null,
+    counts.planned > 0 ? `${counts.planned} planned` : null,
+  ].filter((segment): segment is string => segment !== null);
+  const statusSummary = `${TOOLS.length} focused tools, grouped by the job they do. ${segments.join(" · ")}.`;
+
   return (
     <Container className="py-10 sm:py-14">
-      <PageHeader
-        eyebrow="Toolkit"
-        title="Tools"
-        description="Ten focused tools, grouped by the job they do. RiskGuard and TradePlan are live; the rest are in development."
-      />
+      <PageHeader eyebrow="Toolkit" title="Tools" description={statusSummary} />
 
       <nav aria-label="Tool groups" className="mt-7">
         <ul className="flex flex-wrap gap-2">

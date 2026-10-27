@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
+import { Field, TextInput } from "@/components/ui/form-field";
+import { Receipt, ReceiptDisclaimer, ReceiptRow, ReceiptSection } from "@/components/ui/receipt";
+import { ScenarioRow } from "@/components/ui/scenario-row";
+import { WarningState } from "@/components/ui/warning-state";
 import {
   compareStrikes,
+  parseRupeesToPaise,
   STRIKE_LENS_FORMULA_ID,
   STRIKE_LENS_MAX_ROWS,
   STRIKE_LENS_MIN_ROWS,
@@ -42,6 +47,18 @@ function formatSignedPaise(paise: number): string {
   return `${sign}${formatPaise(paise)}`;
 }
 
+/**
+ * Presentation-level parsed confirmation. Uses the tool's existing domain
+ * parser — never a second parser — and returns null for empty or unparseable
+ * input so the line disappears naturally. Shown only when the field has no
+ * validation error (the shared Field handles that).
+ */
+function parsedMoneyConfirmation(raw: string): string | null {
+  if (raw.trim() === "") return null;
+  const paise = parseRupeesToPaise(raw);
+  return paise === null ? null : `Parsed as ${formatPaise(paise)}`;
+}
+
 const EMPTY_ROW = { strike: "", premium: "" };
 
 const EMPTY_FIELDS: StrikeLensRawFields = {
@@ -51,56 +68,9 @@ const EMPTY_FIELDS: StrikeLensRawFields = {
   expiryLabel: "",
 };
 
-const INPUT_CLASS =
-  "tnum min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-ink placeholder:text-ink-muted/70";
 const LABEL_CLASS = "type-label block text-ink";
 const HINT_CLASS = "type-caption mt-1 text-ink-muted";
 const ERROR_CLASS = "type-caption mt-1 font-medium text-danger";
-
-function Field({
-  id,
-  label,
-  hint,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  error?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className={LABEL_CLASS}>
-        {label}
-      </label>
-      {children}
-      {error ? (
-        <p id={`${id}-error`} className={ERROR_CLASS}>
-          {error}
-        </p>
-      ) : hint ? (
-        <p id={`${id}-hint`} className={HINT_CLASS}>
-          {hint}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function ReceiptRow({ term, value }: { term: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5">
-      <dt className="type-helper text-ink-muted">{term}</dt>
-      <dd className="tnum type-helper shrink-0 text-right text-ink">{value}</dd>
-    </div>
-  );
-}
-
-function moneynessTone(moneyness: string): "primary" | "neutral" {
-  return moneyness === "ATM" ? "primary" : "neutral";
-}
 
 export function StrikeLensComparison({
   initialFields = {},
@@ -210,72 +180,76 @@ export function StrikeLensComparison({
           </div>
         ) : null}
         <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-6">
-          <Field
-            id="sl-spot"
-            label="Spot (₹)"
-            hint="The underlying price you want to compare against."
-            error={errors.spot}
-          >
-            <input
+          <fieldset className="space-y-4">
+            <legend className="type-eyebrow text-ink-muted">Underlying</legend>
+            <Field
               id="sl-spot"
-              name="spot"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="100"
-              value={fields.spot}
-              onChange={(event) => setField("spot", event.target.value)}
-              aria-invalid={Boolean(errors.spot)}
-              aria-describedby={describe("sl-spot", true, Boolean(errors.spot))}
-              className={`${INPUT_CLASS} mt-1.5 ${errors.spot ? "border-danger" : ""}`}
-            />
-          </Field>
-
-          <div>
-            <span id="sl-type-label" className={LABEL_CLASS}>
-              Option type
-            </span>
-            <div
-              role="radiogroup"
-              aria-labelledby="sl-type-label"
-              className="mt-1.5 grid grid-cols-2 gap-2"
+              label="Spot (₹)"
+              hint="The underlying price you want to compare against."
+              error={errors.spot}
+              confirmation={parsedMoneyConfirmation(fields.spot)}
             >
-              {(
-                [
-                  { value: "call", label: "CE (Call)" },
-                  { value: "put", label: "PE (Put)" },
-                ] as const
-              ).map((option) => (
-                <label
-                  key={option.value}
-                  className={`type-label inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 transition-colors ${
-                    fields.optionType === option.value
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-line bg-surface text-ink-muted"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="optionType"
-                    value={option.value}
-                    checked={fields.optionType === option.value}
-                    onChange={() => setField("optionType", option.value)}
-                    className="size-4 accent-[#064e3b]"
-                  />
-                  {option.label}
-                </label>
-              ))}
+              <TextInput
+                id="sl-spot"
+                name="spot"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="100"
+                prefix="₹"
+                invalid={Boolean(errors.spot)}
+                value={fields.spot}
+                onChange={(event) => setField("spot", event.target.value)}
+                aria-describedby={describe("sl-spot", true, Boolean(errors.spot))}
+              />
+            </Field>
+
+            <div>
+              <span id="sl-type-label" className={LABEL_CLASS}>
+                Option type
+              </span>
+              <div
+                role="radiogroup"
+                aria-labelledby="sl-type-label"
+                className="mt-1.5 grid grid-cols-2 gap-2"
+              >
+                {(
+                  [
+                    { value: "call", label: "CE (Call)" },
+                    { value: "put", label: "PE (Put)" },
+                  ] as const
+                ).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`type-label inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 transition-colors ${
+                      fields.optionType === option.value
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-line bg-surface text-ink-muted"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="optionType"
+                      value={option.value}
+                      checked={fields.optionType === option.value}
+                      onChange={() => setField("optionType", option.value)}
+                      className="size-4 accent-[#064e3b]"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              {errors.optionType ? (
+                <p id="sl-type-error" className={ERROR_CLASS}>
+                  {errors.optionType}
+                </p>
+              ) : (
+                <p id="sl-type-hint" className={HINT_CLASS}>
+                  One type per comparison.
+                </p>
+              )}
             </div>
-            {errors.optionType ? (
-              <p id="sl-type-error" className={ERROR_CLASS}>
-                {errors.optionType}
-              </p>
-            ) : (
-              <p id="sl-type-hint" className={HINT_CLASS}>
-                One type per comparison.
-              </p>
-            )}
-          </div>
+          </fieldset>
 
           <fieldset className="space-y-4">
             <legend className="type-eyebrow text-ink-muted">
@@ -301,34 +275,44 @@ export function StrikeLensComparison({
                     ) : null}
                   </div>
                   <div className="mt-2 grid gap-4 sm:grid-cols-2">
-                    <Field id={strikeId} label="Strike (₹)" error={rowError.strike}>
-                      <input
+                    <Field
+                      id={strikeId}
+                      label="Strike (₹)"
+                      error={rowError.strike}
+                      confirmation={parsedMoneyConfirmation(row.strike)}
+                    >
+                      <TextInput
                         id={strikeId}
                         name={`strike-${index}`}
                         type="text"
                         inputMode="decimal"
                         autoComplete="off"
                         placeholder="95"
+                        prefix="₹"
+                        invalid={Boolean(rowError.strike)}
                         value={row.strike}
                         onChange={(event) => setRow(index, "strike", event.target.value)}
-                        aria-invalid={Boolean(rowError.strike)}
                         aria-describedby={rowError.strike ? `${strikeId}-error` : undefined}
-                        className={`${INPUT_CLASS} mt-1.5 ${rowError.strike ? "border-danger" : ""}`}
                       />
                     </Field>
-                    <Field id={premiumId} label="Premium (₹)" error={rowError.premium}>
-                      <input
+                    <Field
+                      id={premiumId}
+                      label="Premium (₹)"
+                      error={rowError.premium}
+                      confirmation={parsedMoneyConfirmation(row.premium)}
+                    >
+                      <TextInput
                         id={premiumId}
                         name={`premium-${index}`}
                         type="text"
                         inputMode="decimal"
                         autoComplete="off"
                         placeholder="8"
+                        prefix="₹"
+                        invalid={Boolean(rowError.premium)}
                         value={row.premium}
                         onChange={(event) => setRow(index, "premium", event.target.value)}
-                        aria-invalid={Boolean(rowError.premium)}
                         aria-describedby={rowError.premium ? `${premiumId}-error` : undefined}
-                        className={`${INPUT_CLASS} mt-1.5 ${rowError.premium ? "border-danger" : ""}`}
                       />
                     </Field>
                   </div>
@@ -353,17 +337,16 @@ export function StrikeLensComparison({
             hint="Display only, e.g. NIFTY 30 OCT. Never enters a calculation."
             error={errors.expiryLabel}
           >
-            <input
+            <TextInput
               id="sl-expiry"
               name="expiryLabel"
               type="text"
               autoComplete="off"
               placeholder="Optional"
+              invalid={Boolean(errors.expiryLabel)}
               value={fields.expiryLabel}
               onChange={(event) => setField("expiryLabel", event.target.value)}
-              aria-invalid={Boolean(errors.expiryLabel)}
               aria-describedby={describe("sl-expiry", true, Boolean(errors.expiryLabel))}
-              className={`${INPUT_CLASS} mt-1.5 ${errors.expiryLabel ? "border-danger" : ""}`}
             />
           </Field>
 
@@ -397,40 +380,47 @@ export function StrikeLensComparison({
         ) : (
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Badge tone="ok">
+              <Badge tone="neutral">
                 Compared {result.rows.length} {result.rows.length === 1 ? "strike" : "strikes"}
               </Badge>
               <span className="type-caption text-ink-muted">{STRIKE_LENS_FORMULA_ID}</span>
             </div>
             <div className="mt-4 space-y-4">
               {result.rows.map((row) => (
-                <article
+                <ScenarioRow
                   key={row.strikePaise}
-                  aria-label={`Strike ${formatPaise(row.strikePaise)} ${optionLabel}`}
-                  className={`rounded-lg border p-4 ${
-                    row.status === "inconsistent"
-                      ? "border-warn/40 bg-warn/5"
-                      : "border-line bg-surface-muted/40"
-                  }`}
+                  label={`${formatPaise(row.strikePaise)} ${optionLabel}`}
+                  ariaLabel={`Strike ${formatPaise(row.strikePaise)} ${optionLabel}`}
+                  headingLevel="h3"
+                  markers={[
+                    { text: row.moneyness, tone: "neutral" },
+                    ...(row.isNearestToSpot
+                      ? [{ text: "Nearest to spot", tone: "neutral" as const }]
+                      : []),
+                    ...(row.status === "inconsistent"
+                      ? [{ text: "Check premium", tone: "warn" as const }]
+                      : []),
+                  ]}
+                  note={
+                    row.breakevenAtOrBelowZero
+                      ? "Breakeven at or below zero — premium covers the full strike."
+                      : undefined
+                  }
+                  className={row.status === "inconsistent" ? "border-warn/40 bg-warn/5" : undefined}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="type-subtitle tnum">
-                      {formatPaise(row.strikePaise)} {optionLabel}
-                    </h3>
-                    <Badge tone={moneynessTone(row.moneyness)}>{row.moneyness}</Badge>
-                    {row.isNearestToSpot ? <Badge tone="neutral">Nearest to spot</Badge> : null}
-                    {row.status === "inconsistent" ? (
-                      <Badge tone="warn">Check premium</Badge>
-                    ) : null}
-                  </div>
                   {row.status === "inconsistent" ? (
-                    <p role="alert" className="type-helper mt-2 font-medium text-warn-strong">
-                      Premium {formatPaise(row.premiumPaise)} is below intrinsic value{" "}
-                      {formatPaise(row.intrinsicPaise)}. Check the premium or strike — extrinsic
-                      value cannot be negative.
-                    </p>
+                    <WarningState
+                      className="mb-3"
+                      message={
+                        <>
+                          Premium {formatPaise(row.premiumPaise)} is below intrinsic value{" "}
+                          {formatPaise(row.intrinsicPaise)}. Check the premium or strike — extrinsic
+                          value cannot be negative.
+                        </>
+                      }
+                    />
                   ) : null}
-                  <dl className="mt-2 divide-y divide-line border-t border-line">
+                  <dl className="divide-y divide-line border-t border-line">
                     <ReceiptRow term="Premium" value={formatPaise(row.premiumPaise)} />
                     <ReceiptRow term="Intrinsic value" value={formatPaise(row.intrinsicPaise)} />
                     <ReceiptRow
@@ -446,19 +436,11 @@ export function StrikeLensComparison({
                       value={formatPaise(row.breakevenPaise)}
                     />
                   </dl>
-                  {row.breakevenAtOrBelowZero ? (
-                    <p className="type-caption mt-2 text-ink-muted">
-                      Breakeven at or below zero — premium covers the full strike.
-                    </p>
-                  ) : null}
-                </article>
+                </ScenarioRow>
               ))}
             </div>
-            <details className="mt-4 rounded-lg border border-line bg-surface-muted/50 px-4 py-2">
-              <summary className="type-label inline-flex min-h-11 cursor-pointer items-center text-ink">
-                Calculation receipt · {STRIKE_LENS_FORMULA_ID}
-              </summary>
-              <dl className="divide-y divide-line border-t border-line pb-2">
+            <Receipt summary={`Calculation receipt · ${STRIKE_LENS_FORMULA_ID}`}>
+              <ReceiptSection title="Inputs">
                 <ReceiptRow term="Spot" value={formatPaise(result.inputs.spotPaise)} />
                 <ReceiptRow
                   term="Option type"
@@ -467,6 +449,8 @@ export function StrikeLensComparison({
                 {result.inputs.expiryLabel !== undefined ? (
                   <ReceiptRow term="Expiry label" value={result.inputs.expiryLabel} />
                 ) : null}
+              </ReceiptSection>
+              <ReceiptSection title="Method">
                 {result.inputs.optionType === "call" ? (
                   <ReceiptRow term="Intrinsic formula" value="max(spot − strike, 0)" />
                 ) : (
@@ -490,13 +474,15 @@ export function StrikeLensComparison({
                   term="Moneyness"
                   value="exact spot = strike is ATM; otherwise by side"
                 />
+              </ReceiptSection>
+              <ReceiptSection title="Rounding">
                 <ReceiptRow term="Rounding" value={result.rounding} />
-              </dl>
-              <p className="type-caption pb-2 text-ink-muted">
+              </ReceiptSection>
+              <ReceiptDisclaimer>
                 User-provided market inputs — not verified by MicroNest, not real-time. Long
                 positions, expiry payoff, costs excluded. Not investment advice.
-              </p>
-            </details>
+              </ReceiptDisclaimer>
+            </Receipt>
           </Card>
         )}
         <Callout title="Understand your trade before taking it" className="mt-6">

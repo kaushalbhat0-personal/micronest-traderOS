@@ -20,28 +20,82 @@
   --danger: #b91c1c;
   --info: #475569;
   --focus: #064e3b;
+
+  /* V2 foundations. Every value below is a semantic token: components consume
+     the token, never a raw color. Tints are reserved for future phases — the
+     existing ad-hoc alpha mixes stay as they are until their migration. */
+  --surface-raised: #fffdfa;
+  --surface-overlay: #ffffff;
+  --surface-sunken: #f0e9dd;
+  --line-strong: #d8cfc0;
+  --ring-focus: #064e3b;
+  --text-faint: #6f6a61;
+  --primary-tint: #e6f0eb;
+  --ok-tint: #e6f4ee;
+  --warn-tint: #f9f0e2;
+  --danger-tint: #f9e9e9;
+
+  /* Motion vocabulary (Phase 4). Three semantic tiers + one easing curve;
+     components reference the tier, never a raw duration. Micro: hover,
+     focus-adjacent, icon nudges. Standard: card/section entrances.
+     Emphasis: hero and major state changes. Stagger delays are capped in
+     the Reveal island, never in tokens. */
+  --motion-micro: 150ms;
+  --motion-standard: 240ms;
+  --motion-emphasis: 380ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Elevation: warm-neutral, low-opacity ink shadows. 1 = resting card,
+     2 = raised/hover card, 3 = overlay/modal level. Never heavy black. */
+  --shadow-1: 0 1px 2px rgb(28 25 23 / 0.05), 0 1px 3px rgb(28 25 23 / 0.04);
+  --shadow-2: 0 4px 12px rgb(28 25 23 / 0.08), 0 2px 4px rgb(28 25 23 / 0.05);
+  --shadow-3: 0 12px 32px rgb(28 25 23 / 0.14), 0 4px 12px rgb(28 25 23 / 0.08);
 }
 
+/**
+ * Canonical token rule: the `:root` variables above are canonical. The
+ * `@theme inline` values below generate Tailwind utilities (which inline the
+ * resolved expression, e.g. `var(--surface)`) — they are NOT runtime
+ * variables, so hand-written CSS must reference `:root` literals or
+ * next/font variables directly, never a bare `@theme` key. Do not restate a
+ * semantic value in both layers.
+ */
 @theme inline {
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --color-canvas: var(--bg);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-surface-sunken: var(--surface-sunken);
   --color-line: var(--border);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--text);
   --color-ink-muted: var(--text-muted);
+  --color-ink-faint: var(--text-faint);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-on-primary: var(--on-primary);
+  --color-primary-tint: var(--primary-tint);
   --color-ok: var(--ok);
   --color-ok-strong: var(--ok-strong);
+  --color-ok-tint: var(--ok-tint);
   --color-warn: var(--warn);
   --color-warn-strong: var(--warn-strong);
+  --color-warn-tint: var(--warn-tint);
   --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
   --color-info: var(--info);
   --color-focus: var(--focus);
+  --color-ring-focus: var(--ring-focus);
+
+  --shadow-1: var(--shadow-1);
+  --shadow-2: var(--shadow-2);
+  --shadow-3: var(--shadow-3);
 }
 
 @layer base {
@@ -53,7 +107,20 @@
   body {
     background-color: var(--bg);
     color: var(--text);
-    font-family: var(--font-sans);
+    /* Next/font variables live on <body> via layout classes; reference the
+       Geist variable directly with the system stack as fallback. (A bare
+       `var(--font-sans)` would NOT work: `@theme inline` keys are not
+       emitted as runtime variables.) */
+    font-family:
+      var(--font-geist-sans),
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      "Helvetica Neue",
+      Arial,
+      sans-serif;
     font-size: 1rem;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
@@ -72,9 +139,10 @@
 
   /* Single focus treatment for the whole product. The outline is drawn
      outside the element (offset 2px), so it stays visible on dark primary
-     buttons as well as on light surfaces. */
+     buttons as well as on light surfaces. The color is the independent
+     --ring-focus token, not an alias of --primary. */
   :focus-visible {
-    outline: 2px solid var(--focus);
+    outline: 2px solid var(--ring-focus);
     outline-offset: 2px;
   }
 
@@ -170,8 +238,56 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Technical figures: receipt values, scenario values and other highly
+ * technical calculation figures. Geist Mono with tabular numerals.
+ * Never body copy — the surrounding prose stays in Geist Sans.
+ */
+@utility type-mono {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Deterministic skip link: off-screen until focused. */
 @layer components {
+  /*
+   * Entrance reveal (Phase 4). Opacity + small vertical transform only —
+   * the only properties the motion system is allowed to animate. The
+   * `data-visible` attribute is set once by the Reveal island when the
+   * block enters the viewport; content stays in the DOM throughout, so
+   * screen readers and search see it regardless of animation state.
+   */
+  .reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition-property: opacity, transform;
+    transition-timing-function: var(--ease-out);
+    transition-duration: var(--motion-standard);
+  }
+
+  .reveal[data-reveal="micro"] {
+    transform: translateY(6px);
+    transition-duration: var(--motion-micro);
+  }
+
+  .reveal[data-reveal="emphasis"] {
+    transition-duration: var(--motion-emphasis);
+  }
+
+  .reveal[data-visible] {
+    opacity: 1;
+    transform: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: none !important;
+    }
+  }
   .skip-link {
     position: absolute;
     top: auto;

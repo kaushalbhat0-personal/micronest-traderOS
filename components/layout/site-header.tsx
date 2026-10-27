@@ -1,5 +1,10 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+
 import { Container } from "@/components/layout/container";
+import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/tools", label: "Tools" },
@@ -14,8 +19,18 @@ const NAV_LINK_CLASS =
  * Two rows on mobile (brand, then nav), one row from `sm` up. The header is
  * deliberately not sticky: it would take ~100px of a 360px-wide viewport on
  * every scroll.
+ *
+ * The current section is marked two ways so it never depends on colour alone:
+ * a quiet active surface plus `aria-current="page"`.
  */
 export function SiteHeader() {
+  const pathname = usePathname();
+
+  function isActive(href: (typeof NAV_ITEMS)[number]["href"]): boolean {
+    if (href === "/tools") return pathname === "/tools" || pathname.startsWith("/tools/");
+    return pathname === href;
+  }
+
   return (
     <header className="border-b border-line bg-canvas">
       <Container className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -26,13 +41,20 @@ export function SiteHeader() {
 
         <nav aria-label="Primary">
           <ul className="-mx-2 flex items-center gap-1">
-            {NAV_ITEMS.map((item) => (
-              <li key={item.href}>
-                <Link href={item.href} className={NAV_LINK_CLASS}>
-                  {item.label}
-                </Link>
-              </li>
-            ))}
+            {NAV_ITEMS.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(NAV_LINK_CLASS, active && "bg-surface-muted text-ink")}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
       </Container>

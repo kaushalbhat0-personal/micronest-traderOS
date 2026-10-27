@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
 export type ButtonVariant = "primary" | "secondary" | "ghost";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-on-primary hover:bg-primary-hover active:bg-primary-hover",
+  primary:
+    "bg-primary text-on-primary hover:bg-primary-hover active:bg-[color-mix(in_srgb,var(--primary)_90%,black)]",
   secondary:
     "border border-line bg-surface text-ink hover:bg-surface-muted active:bg-surface-muted",
   ghost: "text-primary hover:bg-surface-muted active:bg-surface-muted",
@@ -16,7 +17,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
  *
  * Focus uses the global `:focus-visible` outline. Disabled buttons switch to a
  * neutral surface instead of fading, because 60% opacity on the primary colour
- * drops label contrast below AA.
+ * drops label contrast below AA. Pressed states consume tokens: primary
+ * darkens via a `--primary` color-mix derive (instant — the transition covers
+ * color only), secondary and ghost reuse the hover surface tokens.
  */
 export function buttonClasses(variant: ButtonVariant = "primary", className?: string): string {
   return cn(
