@@ -303,7 +303,7 @@ export default function HomePage() {
       <section className="border-b border-line">
         <Container className="py-12 sm:py-16">
           <Reveal>
-            <div className="max-w-2xl">
+            <div className="mx-auto max-w-2xl text-center">
               <p className="type-eyebrow text-ink-muted">Product tour</p>
               <h2 className="type-section mt-2">See the real product</h2>
               <p className="type-body mt-2 text-ink-muted">

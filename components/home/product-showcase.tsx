@@ -78,7 +78,11 @@ export function ProductShowcase() {
 
   return (
     <div>
-      <div role="group" aria-label="Choose a tool to preview" className="flex flex-wrap gap-2">
+      <div
+        role="group"
+        aria-label="Choose a tool to preview"
+        className="flex flex-wrap justify-center gap-2"
+      >
         {SHOWCASE_ORDER.map((entry) => {
           const pressed = entry.key === active.key;
           return (
@@ -117,7 +121,10 @@ export function ProductShowcase() {
         </figcaption>
       </figure>
 
-      <div aria-live="polite" className="mt-6 max-w-2xl">
+      <div
+        aria-live="polite"
+        className="mx-auto mt-6 flex max-w-2xl flex-col items-center text-center"
+      >
         <p className="type-subtitle">{active.name}</p>
         <p className="type-body mt-1.5 text-ink-muted">{active.outcome}</p>
         <Link
