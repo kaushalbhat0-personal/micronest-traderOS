@@ -538,6 +538,79 @@ Tool-specific deviations must be recorded in the formula entry.
   spread across legs means cost-robustness on that fixture — nothing more.
   Not investment advice, not a prediction.
 
+### SLAB-SPLIT-001 — Frozen IS/OOS research split
+
+- **Tool:** Strategy Lab (research fixture configuration, consumed by
+  `features/strategy-lab/metrics.ts`, `classifyTradePartition`)
+- **Status:** frozen (M1-E)
+- **Definition:**
+  - dataset: `slab-sample-daily-001`
+  - splitDate: `2026-09-14` (immutable; not configurable, not inferred,
+    not optimized, not selected from performance)
+  - classification: whole trades by `entryDate`
+  - boundary: `entryDate < 2026-09-14` → IS; `entryDate >= 2026-09-14` → OOS
+  - crossing trades: the entire trade belongs to its entry partition —
+    never split, duplicated, prorated, or partially attributed
+- **Examples:** entry 2026-09-13 / exit 2026-09-16 → whole trade IS;
+  entry 2026-09-14 → OOS.
+- **Source:** explicitly approved research definition (M1-E lock); the date
+  balances the 15-bar fixture into pre/post windows and proves the
+  partitioning infrastructure, nothing more.
+- **Effective date:** n/a
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-metrics.test.ts` (exact boundary,
+  pre/split/post entries, whole crossing trade, no duplication, partition
+  net additivity)
+- **Limitations:** the split exists to prove deterministic research
+  infrastructure. It is not a market-regime claim and carries no statistical
+  significance or predictive validity, especially on a synthetic fixture.
+  Not investment advice, not a prediction.
+
+### SLAB-MET-001 — Research metrics over sensitivity legs
+
+- **Tool:** Strategy Lab (`features/strategy-lab/metrics.ts`, `analyzeResearch`)
+- **Status:** shipped (M1-E)
+- **Definition (per partition: all / IS / OOS; per leg: 0 / 5 / 10 bps):**
+  - `tradeCount`: completed M1-C trades only
+  - `netPnlPaise = Σ trade.netPnlPaise` (M1-C values, exact integer sums)
+  - win/loss/flat on net per trade (`> 0` / `< 0` / `=== 0`);
+    `winRate = wins / completedTrades` (null when zero trades; flats in the
+    denominator, never counted as wins)
+  - `expectancy = Σ net / tradeCount` as exact rational `{num, den}` plus a
+    deterministic 6-place display expansion (null when zero trades)
+  - `profitFactor = Σ gross>0 / Σ |gross<0|` on slipped fills — gross, never
+    net, never re-costed; null with note `no-losing-trades` (or `no-trades`)
+  - `maxDrawdownPaise`: cumulative net in chronological exit order from
+    equity 0 (`peak = max`, `dd = peak − equity`, running max); 0 when empty.
+    No account balance, no unrealized P&L, no gross basis.
+  - `costDrag = { statutory Σ(buy+sell), slippage Σ(entry+exit slip × qty),
+total = sum }` — reporting decomposition only, never deducted again.
+    M1-C identities hold: `grossBeforeSlip − gross = slippage`;
+    `gross − statutory = net`.
+- **Headline:** the 5 bps OOS partition, exposed as `referenceOos` — the same
+  object, not a recalculation; legs are never ranked.
+- **Inputs:** complete M1-D sensitivity results. No strategy calls, no
+  backtest reruns, no fill/cost recomputation; inputs never mutated.
+- **Units:** paise integers for money; exact rationals with display strings
+  for expectancy/win-rate/profit-factor.
+- **Rounding policy:** none on money (integers throughout); display decimals
+  are round-half-up 6-place expansions for reading only.
+- **Edge cases:** zero trades → null expectancy/win-rate/profit-factor,
+  zero drawdown, zero drags; profit factor null (not infinite, not zero)
+  without gross losses.
+- **Source:** independently implemented from the locked M1-E definitions.
+  No employer material, no proprietary method.
+- **Effective date:** n/a
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-metrics.test.ts` (net/count sums,
+  win/flat/loss classification, exact expectancy rationals, gross-based
+  profit-factor proof, drawdown shapes, drag decomposition, full-stack
+  sensitivity preservation with reference identity, invalid propagation,
+  byte determinism, input-immutability, real M1-C record passthrough)
+- **Limitations:** research metrics on a synthetic fixture — descriptive of
+  the simulation, predictive of nothing. No optimization or ranking claim.
+  Not investment advice, not a prediction.
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -581,6 +654,8 @@ broker. A rate change is a data change, not a formula change.
 - SLAB-EXEC-001 — Deterministic next-open backtester (v1.0.0, shipped). See §6.
 - SLAB-COST-001 — Per-fill delivery cost and slippage pricer (v1.0.0, shipped). See §6.
 - SLAB-SENS-001 — Execution-cost sensitivity harness (v1.0.0, shipped). See §6.
+- SLAB-SPLIT-001 — Frozen IS/OOS research split (v1.0.0, frozen). See §6.
+- SLAB-MET-001 — Research metrics over sensitivity legs (v1.0.0, shipped). See §6.
 
 ---
 
