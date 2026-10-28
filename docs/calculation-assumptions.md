@@ -505,6 +505,39 @@ Tool-specific deviations must be recorded in the formula entry.
 - **Limitations:** estimator, not a contract-note replica — verify against
   the broker's note. Not investment advice.
 
+### SLAB-SENS-001 — Execution-cost sensitivity harness
+
+- **Tool:** Strategy Lab (`features/strategy-lab/sensitivity.ts`, `runSensitivity`)
+- **Status:** shipped (M1-D)
+- **Definition:** runs the frozen M1-C backtest three times over identical
+  inputs (bars, strategy, params, quantity, brokerage), varying only
+  `slippageBps` across the locked legs 0, 5, 10 — returned as a fixed tuple
+  in that order, with 5 bps marked the reference leg. Each leg preserves its
+  complete M1-C result (trades, rejections, diagnostics). Invalid legs
+  propagate as leg-tagged errors; nothing is repaired or retried.
+- **Inputs:** shared dataset, strategy, params, quantity, brokerage. No
+  slippage input exists — other legs are inexpressible.
+- **Outputs:** frozen `{ referenceBps: 5, legs: [0bps, 5bps, 10bps] }`.
+- **Assumptions:** delegation-only — zero slippage/cost/strategy/execution
+  logic of its own; determinism inherited from M1-C.
+- **Units:** basis points for the leg label; all economics in paise via M1-C.
+- **Rounding policy:** none of its own (M1-C rules apply per leg).
+- **Edge cases:** any invalid leg fails the whole harness with prefixed
+  field paths; empty legs impossible by tuple type.
+- **Source:** orchestration only; independently implemented, no employer
+  material, no proprietary method.
+- **Effective date:** n/a
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-sensitivity.test.ts` (locked legs and
+  order, shared-input observation across all 12 strategy calls, raw-price
+  stability vs fill divergence, JSON-equality with direct M1-C runs, full
+  trade-field preservation, leg-tagged errors, determinism, visible friction
+  with no double deduction)
+- **Limitations:** execution-cost sensitivity, not strategy optimization. No
+  search, no ranking, no parameter choice, no predictive claim. A narrower
+  spread across legs means cost-robustness on that fixture — nothing more.
+  Not investment advice, not a prediction.
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -547,6 +580,7 @@ broker. A rate change is a data change, not a formula change.
 - SLAB-STRAT-001 — SMA cross with N-bar-low stop (v1.0.0, shipped). See §6.
 - SLAB-EXEC-001 — Deterministic next-open backtester (v1.0.0, shipped). See §6.
 - SLAB-COST-001 — Per-fill delivery cost and slippage pricer (v1.0.0, shipped). See §6.
+- SLAB-SENS-001 — Execution-cost sensitivity harness (v1.0.0, shipped). See §6.
 
 ---
 
