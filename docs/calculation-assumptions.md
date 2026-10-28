@@ -611,6 +611,55 @@ total = sum }` — reporting decomposition only, never deducted again.
   the simulation, predictive of nothing. No optimization or ranking claim.
   Not investment advice, not a prediction.
 
+### SLAB-PAPER-001 — Replay paper session
+
+- **Tool:** Strategy Lab (`features/strategy-lab/paper.ts`, `replayPaperSession`
+  / `appendPaperBar`)
+- **Status:** shipped (M2-A)
+- **Definition:** replay and re-derivation over the frozen M1 stack — no
+  execution engine of its own. For each validated bar prefix `bars[0..t]`, the
+  frozen M1-C `runBacktest` (the conformance oracle) is re-run with the locked
+  M2-A configuration (`quantity = 1`, `slippageBps = 5`, `brokeragePaise =
+2000`, reference strategy and parameters), and the paper state is derived
+  from that authoritative result: completed trades become ledger entries, a
+  terminal provisional forced-final becomes the open position (paper holds
+  overnight; it never force-closes), and frontier signals become pending
+  intents. No fill, stop, target, slippage, cost, or strategy logic is
+  reimplemented — every paise is read from an M1-C trade record.
+- **Session config (fictional, frozen for M2-A):** `startingCashPaise =
+10_000_000` (₹1,00,000 paper cash, never real capital), `quantity = 1`,
+  `slippageBps = 5`, `brokeragePaise = 2000`. No RiskGuard, no `riskBps`, no
+  `lotSize` in the M2-A path.
+- **Ledger:** `realizedPnl = Σ trade.netPnlPaise`; `cash = startingCash +
+realized`. Trade identity `entryDate>exitDate`; the ledger is rebuilt from
+  each prefix result, so replaying a prefix can never duplicate entries.
+- **Inputs:** M1-A-validated bars only (the M2-A source is the synthetic
+  `slab-sample-daily-001` fixture); incremental appends re-check canonical
+  date, session symbol, and monotonicity. Data source: replayed historical
+  bars — no live market data, no provider, no downloads.
+- **Units:** integer paise throughout; read-time unrealized P&L is
+  `(lastClose − entryFill) × quantity`, derived on demand, never stored.
+- **Rounding policy:** none of its own (M1-C/M1 cost rules apply per leg).
+- **Edge cases:** duplicate date with identical content is a no-op returning
+  the same session; older dates, divergent bars, and foreign symbols are
+  rejected deterministically; strategy-impurity (non-reproduced proposals)
+  fails loudly instead of guessing.
+- **Source:** orchestration of frozen M1-A/M1-B/M1-C contracts only. No
+  employer material, no proprietary method.
+- **Effective date:** n/a
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-paper.test.ts` (frozen config, fixture
+  replay with zero-trade warmup pin, M1-C field-for-field equivalence,
+  frontier open-position rule, pending intents, rejections, idempotent
+  frontier replay, non-monotonic rejection, determinism, no-mutation,
+  domain-purity source scan)
+- **Limitations:** a replay of a synthetic fixture shorter than the strategy
+  warmup — the live fixture yields zero completed trades, which proves the
+  pipeline, not tradability. No persistence, no live data, no broker, no
+  RiskGuard, no AI. M2-B introduces the explicit single-bar stepper; this
+  file remains the replay oracle harness. Not investment advice, not a
+  prediction.
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -656,6 +705,7 @@ broker. A rate change is a data change, not a formula change.
 - SLAB-SENS-001 — Execution-cost sensitivity harness (v1.0.0, shipped). See §6.
 - SLAB-SPLIT-001 — Frozen IS/OOS research split (v1.0.0, frozen). See §6.
 - SLAB-MET-001 — Research metrics over sensitivity legs (v1.0.0, shipped). See §6.
+- SLAB-PAPER-001 — Replay paper session (v1.0.0, shipped). See §6.
 
 ---
 
