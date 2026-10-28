@@ -1,5 +1,6 @@
 import { FlaskConical } from "lucide-react";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { formatINR, formatRatePercent } from "@/app/lab/format";
@@ -7,6 +8,7 @@ import type { StrategyLabReportOk } from "@/app/lab/report";
 import { Container } from "@/components/layout/container";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
+import { buttonClasses } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
 import { Metric } from "@/components/ui/metric";
@@ -187,10 +189,16 @@ export function StrategyLabReportView({ report }: { report: StrategyLabReportOk 
         />
       </div>
 
-      <Callout tone="warn" title="Synthetic fixture — not market evidence" className="mt-7">
+      <Callout tone="warn" title="Synthetic fixture - not market evidence" className="mt-7">
         This report uses a synthetic fixture dataset. It is an engineering validation of the
         research pipeline, not evidence of real-market profitability.
       </Callout>
+
+      <div className="mt-7">
+        <Link href="/lab/operator" className={buttonClasses("secondary")}>
+          Open the manual paper operator
+        </Link>
+      </div>
 
       <section aria-labelledby="slab-config" className="mt-10 space-y-4">
         <SectionHeading>
