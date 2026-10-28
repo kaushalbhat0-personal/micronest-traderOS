@@ -5,6 +5,7 @@ import {
   type BacktestRejectedEntry,
   type BacktestTrade,
 } from "@/features/strategy-lab/backtester";
+import { applySlippage, calculateFillCosts } from "@/features/strategy-lab/costs";
 import type { Bar, StrategyParams } from "@/features/strategy-lab/types";
 import {
   parseDateField,
@@ -431,6 +432,303 @@ export function replayPaperSession(
     session = appended.session;
   }
   return { status: "ok", session };
+}
+
+/**
+ * M2-B explicit single-bar stepper — incremental transition that conforms to
+ * the frozen M1-C execution semantics and the frozen M2-A replay
+ * interpretation.
+ *
+ * One call processes exactly one frontier bar: pending intents execute at the
+ * bar open, protective exits (stop-first gap-through) precede signal exits,
+ * the strategy evaluates at the close on `bars[0..t]`, and pendings are
+ * stored for the next bar. No forced-final close is ever manufactured: a
+ * position stays open until a later bar exits it, matching M2-A's
+ * provisional-frontier rule.
+ *
+ * Numeric economics reuse the frozen primitives (`applySlippage`,
+ * `calculateFillCosts`, exact BigInt P&L identities); only the per-bar
+ * sequencing is re-expressed here, and it is bound by byte-equality
+ * conformance tests against M2-A replay and M1-C. Entry raw/slip for a
+ * future close are re-read from the stored entry bar through frozen
+ * `applySlippage`, so the M2-A state shape is unchanged.
+ */
+
+type PaperProtectiveHit = { type: "stop" | "target"; raw: number };
+
+/** M1-C protective ordering for one execution bar: gap-through, stop-first. */
+function paperProtectiveExit(
+  bar: Bar,
+  stop: number,
+  target: number | null,
+): PaperProtectiveHit | null {
+  if (bar.openPaise <= stop) {
+    return { type: "stop", raw: bar.openPaise };
+  }
+  if (target !== null && bar.openPaise >= target) {
+    return { type: "target", raw: bar.openPaise };
+  }
+  if (bar.lowPaise <= stop) {
+    return { type: "stop", raw: stop };
+  }
+  if (target !== null && bar.highPaise >= target) {
+    return { type: "target", raw: target };
+  }
+  return null;
+}
+
+interface PaperStepperConfig {
+  quantity: number;
+  slippageBps: number;
+  brokeragePaise: number;
+}
+
+/**
+ * Builds the completed ledger entry for a stepper close. Entry raw/slip are
+ * re-read from the stored entry bar through frozen `applySlippage` and must
+ * reproduce the recorded entry fill exactly; economics otherwise mirror the
+ * M1-C close identity using the frozen cost pricer.
+ */
+function buildStepperClose(
+  open: PaperOpenPosition,
+  entryBarOpenPaise: number,
+  exitDate: string,
+  exitRaw: number,
+  reason: BacktestTrade["exitReason"],
+  config: PaperStepperConfig,
+): PaperLedgerEntry | PaperIssue {
+  const entry = applySlippage(entryBarOpenPaise, "buy", config.slippageBps);
+  if (entry.fillPricePaise !== open.entryFillPaise) {
+    return { field: "bars", reason: "Entry bar no longer reproduces the recorded entry fill." };
+  }
+  const sell = applySlippage(exitRaw, "sell", config.slippageBps);
+  const sellTurnover = sell.fillPricePaise * config.quantity;
+  if (!Number.isSafeInteger(sellTurnover)) {
+    return { field: "quantity", reason: "Exit turnover exceeds safe integer range." };
+  }
+  const sellStatutory = calculateFillCosts(sellTurnover, "sell", config.brokeragePaise).totalPaise;
+  const grossBig = BigInt(sell.fillPricePaise - open.entryFillPaise) * BigInt(config.quantity);
+  const gross = toSafeNumber(grossBig);
+  const net = gross === null ? null : gross - (open.buyStatutoryPaise + sellStatutory);
+  if (gross === null || net === null || !Number.isSafeInteger(net)) {
+    return { field: "quantity", reason: "Trade P&L exceeds safe integer range." };
+  }
+  return Object.freeze({
+    id: paperTradeId({ entryDate: open.entryDate, exitDate }),
+    entryDate: open.entryDate,
+    exitDate,
+    quantity: config.quantity,
+    entryRawPricePaise: entry.rawPricePaise,
+    exitRawPricePaise: exitRaw,
+    entryFillPricePaise: entry.fillPricePaise,
+    exitFillPricePaise: sell.fillPricePaise,
+    entrySlippagePaise: entry.slipPaise,
+    exitSlippagePaise: sell.slipPaise,
+    buyStatutoryPaise: open.buyStatutoryPaise,
+    sellStatutoryPaise: sellStatutory,
+    grossPnlPaise: gross,
+    netPnlPaise: net,
+    exitReason: reason,
+    forcedExitAtEnd: false,
+  });
+}
+
+/**
+ * Advances a paper session by exactly one chronological bar. Pure and
+ * deterministic: same state plus same bar always yields the same next state.
+ * The identical frontier bar is a no-op returning the same session;
+ * anything older, divergent, or foreign is rejected deterministically.
+ */
+export function stepPaper(session: PaperSessionState, bar: Bar): PaperSessionResult {
+  const date = typeof bar?.date === "string" ? parseDateField(bar.date) : null;
+  if (date === null) {
+    return fail("bar.date", "bar.date must be a canonical YYYY-MM-DD date.");
+  }
+  const symbol = typeof bar?.symbol === "string" ? parseSymbolField(bar.symbol) : null;
+  if (symbol === null) {
+    return fail("bar.symbol", "bar.symbol must be a valid M1 symbol.");
+  }
+  if (session.symbol !== null && symbol !== session.symbol) {
+    return fail("bar.symbol", "bar.symbol must match the session symbol.");
+  }
+  const last = session.lastProcessedDate;
+  if (last !== null) {
+    if (date < last) {
+      return fail("bar.date", "bar.date is older than the last processed bar.");
+    }
+    if (date === last) {
+      const stored = session.bars[session.bars.length - 1] as Bar | undefined;
+      if (stored !== undefined && JSON.stringify(stored) === JSON.stringify(bar)) {
+        return { status: "ok", session };
+      }
+      return fail("bar.date", "A different bar is already recorded for this date.");
+    }
+  }
+
+  const nextBars = Object.freeze([...session.bars, bar]);
+  const stepperConfig: PaperStepperConfig = {
+    quantity: session.config.quantity,
+    slippageBps: session.config.slippageBps,
+    brokeragePaise: session.config.brokeragePaise,
+  };
+
+  let open = session.open;
+  let pending = session.pending;
+  const rejected: BacktestRejectedEntry[] = [...session.rejectedEntries];
+  const ledger: PaperLedgerEntry[] = [...session.ledger];
+  let entriesExecuted = session.diagnostics.entriesExecuted;
+
+  const closeOpen = (exitRaw: number, reason: BacktestTrade["exitReason"]): PaperIssue | null => {
+    const current = open;
+    if (current === null) {
+      return { field: "open", reason: "No open position to close." };
+    }
+    const entryBar = nextBars.find((candidate) => candidate.date === current.entryDate);
+    if (entryBar === undefined) {
+      return { field: "bars", reason: "Entry bar is missing from session history." };
+    }
+    const closed = buildStepperClose(
+      current,
+      entryBar.openPaise,
+      date,
+      exitRaw,
+      reason,
+      stepperConfig,
+    );
+    if (!isLedgerEntry(closed)) {
+      return closed;
+    }
+    ledger.push(closed);
+    open = null;
+    return null;
+  };
+
+  if (pending !== null && pending.kind === "entry") {
+    if (open !== null) {
+      return fail("pending", "Stale entry intent cannot coexist with an open position.");
+    }
+    const buy = applySlippage(bar.openPaise, "buy", stepperConfig.slippageBps);
+    if (pending.stopPaise >= buy.fillPricePaise) {
+      rejected.push(
+        Object.freeze({
+          date,
+          reason: "non-protective-stop",
+          stopPaise: pending.stopPaise,
+          entryFillPricePaise: buy.fillPricePaise,
+        }),
+      );
+    } else {
+      const buyTurnover = buy.fillPricePaise * stepperConfig.quantity;
+      if (!Number.isSafeInteger(buyTurnover)) {
+        return fail("quantity", "Entry turnover exceeds safe integer range.");
+      }
+      const buyStatutory = calculateFillCosts(
+        buyTurnover,
+        "buy",
+        stepperConfig.brokeragePaise,
+      ).totalPaise;
+      open = Object.freeze({
+        symbol,
+        side: "long",
+        quantity: stepperConfig.quantity,
+        entryDate: date,
+        entryFillPaise: buy.fillPricePaise,
+        buyStatutoryPaise: buyStatutory,
+        stopPaise: pending.stopPaise,
+        targetPaise: pending.targetPaise,
+        status: "open",
+      }) as PaperOpenPosition;
+      entriesExecuted += 1;
+    }
+    pending = null;
+  }
+
+  let pendingExit = pending !== null && pending.kind === "exit";
+  if (open !== null) {
+    const hit = paperProtectiveExit(bar, open.stopPaise, open.targetPaise);
+    if (hit !== null) {
+      const failure = closeOpen(hit.raw, hit.type);
+      if (failure !== null) {
+        return { status: "invalid", errors: [failure] };
+      }
+      pendingExit = false;
+    } else if (pendingExit) {
+      const failure = closeOpen(bar.openPaise, "signal");
+      if (failure !== null) {
+        return { status: "invalid", errors: [failure] };
+      }
+      pendingExit = false;
+    }
+  } else {
+    pendingExit = false;
+  }
+
+  const decision = session.config.evaluate({
+    bars: nextBars,
+    position:
+      open === null
+        ? { status: "flat" }
+        : {
+            status: "long",
+            entryPricePaise: open.entryFillPaise,
+            quantity: open.quantity,
+            stopPaise: open.stopPaise,
+            targetPaise: open.targetPaise,
+          },
+    params: session.config.params,
+  });
+  let signalsUnexecuted = 0;
+  if (decision.kind === "entry" && open === null) {
+    pending = Object.freeze({
+      kind: "entry",
+      stopPaise: decision.stopPaise,
+      targetPaise: decision.targetPaise,
+    }) as PaperPendingIntent;
+    signalsUnexecuted = 1;
+  } else if (decision.kind === "exit" && open !== null) {
+    pending = Object.freeze({ kind: "exit" }) as PaperPendingIntent;
+  } else {
+    pending = null;
+  }
+
+  let realized = 0n;
+  for (const entry of ledger) {
+    realized += BigInt(entry.netPnlPaise);
+  }
+  const realizedPaise = toSafeNumber(realized);
+  const cashPaise =
+    realizedPaise === null
+      ? null
+      : toSafeNumber(BigInt(session.config.startingCashPaise) + BigInt(realizedPaise));
+  if (realizedPaise === null || cashPaise === null) {
+    return fail("ledger", "Paper accounting exceeds safe integer range.");
+  }
+
+  return {
+    status: "ok",
+    session: Object.freeze({
+      config: session.config,
+      symbol: session.symbol ?? symbol,
+      bars: nextBars,
+      lastProcessedDate: date,
+      ledger: Object.freeze(ledger),
+      realizedPnlPaise: realizedPaise,
+      cashPaise,
+      open,
+      pending,
+      diagnostics: Object.freeze({
+        barsProcessed: nextBars.length,
+        entriesExecuted,
+        signalsUnexecutedAtEnd: signalsUnexecuted,
+        rejectedEntries: rejected.length,
+      }),
+      rejectedEntries: Object.freeze(rejected),
+    }),
+  };
+}
+
+function isLedgerEntry(value: PaperLedgerEntry | PaperIssue): value is PaperLedgerEntry {
+  return typeof (value as PaperLedgerEntry).id === "string";
 }
 
 /**

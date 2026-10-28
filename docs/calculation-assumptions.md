@@ -660,6 +660,52 @@ realized`. Trade identity `entryDate>exitDate`; the ledger is rebuilt from
   file remains the replay oracle harness. Not investment advice, not a
   prediction.
 
+### SLAB-PAPER-002 — Explicit single-bar paper stepper
+
+- **Tool:** Strategy Lab (`features/strategy-lab/paper.ts`, `stepPaper`)
+- **Status:** shipped (M2-B)
+- **Definition:** incremental transition `state + one bar → next state` that
+  conforms to frozen M1-C execution semantics and the frozen M2-A replay
+  interpretation. Per frontier bar, in order: execute a pending entry intent
+  at the open (slipped via `applySlippage`, rejected when `stop >= fill`,
+  costed via `calculateFillCosts`); resolve protective exits before signal
+  exits using the M1-C gap-through order (open-through first, then intrabar,
+  stop before target); evaluate the frozen strategy at the close on
+  `bars[0..t]` with the post-execution position; store entry/exit pendings
+  for the next bar. State, ledger shape, trade identity, cash accounting,
+  diagnostics, rejection records, and idempotent/monotonic frontier rules
+  are shared with M2-A — no parallel state model.
+- **Final bar:** no forced-final close is ever manufactured. A position open
+  at the frontier stays open with a pending intent, exactly matching M2-A's
+  provisional-frontier interpretation; a later bar provides the actual exit.
+- **Inputs:** M1-A-validated bars appended in strict chronological order;
+  identical frontier bars are idempotent no-ops; older, divergent, and
+  foreign bars are rejected. Strategy sees history-so-far only, never future
+  bars.
+- **Units:** integer paise throughout; exact BigInt P&L identities; read-time
+  unrealized P&L derived on demand, never stored.
+- **Rounding policy:** none of its own (frozen `applySlippage` /
+  `calculateFillCosts` rules apply per fill).
+- **Edge cases:** stale entry intent with an open position, unreproducible
+  entry fills, missing entry bars, and unsafe-integer accounting all fail
+  loudly as `invalid` instead of guessing.
+- **Source:** sequencing re-expressed for incremental stepping; all numeric
+  economics reuse frozen M1-C/M1 cost primitives. No employer material, no
+  proprietary method.
+- **Effective date:** n/a
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-paper-stepper.test.ts` (empty start,
+  per-prefix equivalence with M2-A replay on the fixture, determinism,
+  no-mutation with frozen outputs, frontier idempotency, bar rejection,
+  entry timing, next-open execution, stop/target gap and intrabar fills,
+  stop-first conflict, entry-bar protective evaluation, non-protective
+  rejection, protective-over-signal precedence, provisional-frontier hold
+  with later normal exit, derived-only unrealized P&L, M1-C field-for-field
+  economics, no future-bar visibility)
+- **Limitations:** fixed quantity, no RiskGuard sizing, no persistence, no
+  live data, no broker, no AI. Risk integration is M2-D and requires this
+  stepper — it is not built here. Not investment advice, not a prediction.
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -706,6 +752,7 @@ broker. A rate change is a data change, not a formula change.
 - SLAB-SPLIT-001 — Frozen IS/OOS research split (v1.0.0, frozen). See §6.
 - SLAB-MET-001 — Research metrics over sensitivity legs (v1.0.0, shipped). See §6.
 - SLAB-PAPER-001 — Replay paper session (v1.0.0, shipped). See §6.
+- SLAB-PAPER-002 — Explicit single-bar paper stepper (v1.0.0, shipped). See §6.
 
 ---
 
