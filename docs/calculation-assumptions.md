@@ -1,6 +1,6 @@
 # Calculation Assumptions & Provenance
 
-**Status:** SL-001 (StrikeLens) and GM-001 (GreekMap) specified alongside RG-001, TP-001 and TC-001. No other trading calculation is implemented yet.
+**Status:** SL-001 (StrikeLens) and GM-001 (GreekMap) specified alongside RG-001, TP-001 and TC-001, plus SLAB-DATA-001 (Strategy Lab dataset boundary). No other trading calculation is implemented yet.
 
 This document is the single place to record where a formula comes from, what it assumes, and how
 it is tested. A calculation must have a record here **before** it ships.
@@ -409,3 +409,52 @@ broker. A rate change is a data change, not a formula change.
 - TC-001 — Transaction cost estimate and breakeven (TradeCost, v1.0.0, shipped). See §6.
 - SL-001 — Option strike comparison (StrikeLens, v1.0.0, shipped). See §6.
 - GM-001 — Single-option BSM-Merton price and Greeks with fixed scenarios (GreekMap, v1.0.0, shipped). See §6.
+- SLAB-DATA-001 — Strategy Lab historical dataset boundary (v1.0.0, shipped). See §10.
+
+---
+
+## 10. Strategy Lab dataset boundary (SLAB-DATA-001)
+
+- **ID:** SLAB-DATA-001
+- **Name:** Historical dataset parse, validation, and manifest verification
+- **Owner:** Strategy Lab (`features/strategy-lab/dataset.ts`, with boundary
+  parsers in `features/strategy-lab/validation.ts` and contracts in
+  `features/strategy-lab/types.ts`)
+- **Status:** shipped (M1-A)
+- **Mathematical definition:** exact string-to-integer decoding only — no
+  estimation, no model. Rupee decimals map to paise by digit shift
+  (`"100.50"` → `10050`); SHA-256 over canonical ASCII bytes (LF, no BOM).
+- **Inputs:** CSV text (`date,symbol,open,high,low,close,volume`); manifest
+  object (`datasetId`, `version`, `source`, `sourceReference`, `retrievedAt`,
+  `sha256`, `timezone`, `session`, `barInterval`, `adjustment`, `universe`,
+  `dateRange`, `rowCount`).
+- **Outputs:** frozen `readonly Bar[]` plus verified manifest, or a
+  row-numbered invalid result. Never throws for data outcomes.
+- **Assumptions:** NSE cash-equity daily bars; session `09:15–15:30
+Asia/Kolkata`; data is split/bonus-adjusted; dividends excluded; symbol
+  changes and delistings out of scope; missing trading days are gaps (never
+  filled or synthesized); single-symbol universe in M1.
+- **Units:** integer paise (money, cap ₹100 crore), integer shares (volume,
+  cap 10^12), canonical `YYYY-MM-DD` dates.
+- **Rounding policy:** none — parsing is exact; SHA-256 half-words use
+  unsigned 32-bit wrap per the standard.
+- **Edge cases:** BOM/non-ASCII rejected; wrong header rejected; short/long
+  rows and blank interior rows rejected; non-canonical or impossible dates
+  rejected; `>2`-decimal, negative, or over-cap prices rejected; zero/negative
+  prices rejected at bar level; non-integer, negative, or unsafe volumes
+  rejected; out-of-order or duplicate `(symbol, date)` rows rejected (never
+  re-sorted); manifest hash/rowCount/dateRange/universe mismatches rejected.
+- **Source / provenance:** independently derived for M1-A from the locked
+  dataset contract. SHA-256 verified against NIST vectors (`""`, `"abc"`).
+  Fixture `slab-sample-daily-001` is synthetic illustrative data authored
+  in-repo — not NSE history, not market data. No employer, customer, student,
+  proprietary, or Brahmos content.
+- **Effective date:** n/a (not a statutory rate)
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-dataset.test.ts` (NIST vectors,
+  canonicalization, money/volume/date/symbol boundaries, ordering, OHLC,
+  gaps, manifest mismatches, golden fixture, immutability)
+- **Limitations (rendered on any future research UI):** single synthetic
+  symbol; no survivorship coverage; close-to-close analysis only once later
+  phases arrive; a positive fixture result proves pipeline correctness, not
+  tradability. Not investment advice, not a prediction.
