@@ -420,6 +420,91 @@ Tool-specific deviations must be recorded in the formula entry.
   liquidity, or risk — those belong to later M1 phases. Not investment advice,
   not a prediction.
 
+### SLAB-EXEC-001 — Deterministic next-open backtester
+
+- **Tool:** Strategy Lab (`features/strategy-lab/backtester.ts`, `runBacktest`)
+- **Status:** shipped (M1-C)
+- **Definition:**
+  - per close `t`: strategy observes `bars[0..t]` (fresh slice) with a
+    flat/long position view; signals schedule for bar `t+1`
+  - entries fill at next-bar open; the proposed stop/target become pending
+    protective levels; a stop `>=` the actual slipped entry fill rejects the
+    entry as `non-protective-stop` (diagnostic, never a trade, never repaired)
+  - protective checks on every held bar, stop-first: open `<= S` → stop fills
+    at the open; open `>= T` → target fills at the open; else low `<= S` →
+    stop fills at `S`; else high `>= T` → target fills at `T`
+  - entry bars run the same protective checks, so fill-then-stop on one bar
+    is representable; protective exits outrank pending signal exits, which
+    fill at the open only when no protective exit occurred
+  - no next bar after a signal → entry dropped (`signalsUnexecutedAtEnd`),
+    exit left to the final rule; any position open after the final bar exits
+    at the final close (`forced-final`, slipped and costed like any sell)
+- **Inputs:** validated `bars`, strategy `evaluate`, validated params, fixed
+  `quantity` (1 … 1_000_000), `slippageBps` (0 | 5 | 10), `brokeragePaise`
+  (≥ 0; locked fixture 2000). Structurally invalid runs return `invalid`.
+- **Outputs:** frozen `trades` (entry/exit dates, raw + slipped fills per
+  leg, per-leg slippage, buy/sell statutory splits, slipped-fill gross,
+  net, reason, forced flag), frozen `rejectedEntries`, frozen diagnostics.
+- **Assumptions:** long-only, one position, fixed quantity, delivery
+  daily-bar research; OHLC-only data cannot reveal intrabar order, so
+  same-bar stop+target resolves stop-first by deliberate pessimism.
+- **Units:** paise for all money; integer quantities and basis points.
+- **Rounding policy:** slippage `roundHalfUp(raw × bps / 10000)` per fill;
+  sell fills floored at 1 paise; P&L via exact integer (BigInt) arithmetic.
+- **Edge cases:** empty/unsorted bars, bad quantity/slippage/brokerage/params
+  → `invalid`; stop gap-through at entry → rejected entry, never a fill;
+  final-bar signal → counted unexecuted, never fabricated.
+- **Source:** independently derived from the locked M1 execution contract.
+  No employer material, no proprietary method, no Brahmos logic.
+- **Effective date:** n/a (not a statutory rate)
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-backtester.test.ts` (next-open entry,
+  final-bar drop, all four gap/intrabar fills, stop-first conflict, entry-bar
+  hold/reject/same-bar-stop, signal-exit timing and priority, forced-final
+  with sell slippage, slippage rounding and floor, locked hand-calculated
+  accounting incl. GST-base assertion, determinism, input validation,
+  window-identity anti-leakage, real-strategy fixture integration)
+- **Limitations:** a research/backtesting model, not a live execution
+  guarantee. No partial fills, no volume gating, no corporate-action
+  handling beyond the dataset contract, no order-queue realism. Fills at the
+  printed open are an assumption, not a promise. Not investment advice,
+  not a prediction.
+
+### SLAB-COST-001 — Per-fill delivery cost and slippage pricer
+
+- **Tool:** Strategy Lab (`features/strategy-lab/costs.ts`, `applySlippage`
+  - `calculateFillCosts`)
+- **Status:** shipped (M1-C)
+- **Definition:**
+  - slippage: buys `raw + roundHalfUp(raw × bps/10000)`, sells mirrored
+    with a 1-paise floor; the slipped price is the fill price, deducted
+    nowhere else
+  - delivery legs on integer-paise turnover: buy = brokerage + STT 0.1% +
+    stamp 0.015% + NSE txn ₹306.99/cr + IPFT ₹0.01/cr + SEBI ₹10/cr + 18%
+    GST on (brokerage + NSE txn + IPFT + SEBI); sell = same without stamp
+  - each leg half-up to paise; GST on exact pre-rounding taxable amounts,
+    rounded once (Model-2, same convention as TC-001, same rate data)
+  - trade economics: `gross = (exitFill − entryFill) × qty` (slipped fills),
+    `net = gross − (buyStatutory + sellStatutory)`; per-leg slippage is a
+    reporting diagnostic satisfying `grossBeforeSlip − gross = slippage`
+- **Inputs:** integer-paise turnover/prices, side, brokerage, slippage bps.
+- **Outputs:** per-leg charge split with total; slipped fill triple.
+- **Assumptions:** rates from `COST_RATE_SET nse-cash-2026-03-01` (single
+  rate source, read as data); DP charges, penalties, account fees excluded
+  and disclosed; ₹20 flat brokerage is a research assumption, not a broker quote.
+- **Units:** paise; basis points for slippage.
+- **Rounding policy:** half-up per leg; GST once on exact amounts.
+- **Edge cases:** zero brokerage/slippage valid (diagnostics); non-integer or
+  negative inputs throw (programmer preconditions, never run-validated data).
+- **Source:** rate data from `config/cost-rates.ts` provenance; arithmetic
+  independently implemented for the lab boundary (no import from TradeCost).
+- **Effective date:** follows the referenced rate set (`2026-03-01`).
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-backtester.test.ts` (slippage legs,
+  rounding, floor, hand-calculated 989/4743/−3754 trade, GST-base check)
+- **Limitations:** estimator, not a contract-note replica — verify against
+  the broker's note. Not investment advice.
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -460,6 +545,8 @@ broker. A rate change is a data change, not a formula change.
 - GM-001 — Single-option BSM-Merton price and Greeks with fixed scenarios (GreekMap, v1.0.0, shipped). See §6.
 - SLAB-DATA-001 — Strategy Lab historical dataset boundary (v1.0.0, shipped). See §10.
 - SLAB-STRAT-001 — SMA cross with N-bar-low stop (v1.0.0, shipped). See §6.
+- SLAB-EXEC-001 — Deterministic next-open backtester (v1.0.0, shipped). See §6.
+- SLAB-COST-001 — Per-fill delivery cost and slippage pricer (v1.0.0, shipped). See §6.
 
 ---
 
