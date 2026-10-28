@@ -6,6 +6,12 @@ import {
   type BacktestTrade,
 } from "@/features/strategy-lab/backtester";
 import { applySlippage, calculateFillCosts } from "@/features/strategy-lab/costs";
+// SLAB-PAPER-003 architectural exception (approved M2-D): this one-directional,
+// acyclic, pure import of the RiskGuard domain function is the sole
+// cross-feature import in Strategy Lab. No adapter, no generic engine, no
+// execution framework — `decidePosition` is called with the next-bar raw open
+// only, and its quantity is authoritative for the gated M2-D path.
+import { decidePosition, type RiskGuardBlockedCode } from "@/features/risk-guard/risk-guard";
 import type { Bar, StrategyParams } from "@/features/strategy-lab/types";
 import {
   parseDateField,
@@ -44,6 +50,12 @@ export const PAPER_SLIPPAGE_BPS = 5;
 /** Locked M2-A brokerage: ₹20.00 per fill. */
 export const PAPER_BROKERAGE_PAISE = 2_000;
 
+/** Locked M2-D RiskGuard risk budget: 100 bps (1%). */
+export const PAPER_RISK_BPS = 100;
+
+/** Locked M2-D RiskGuard lot size: 1 unit. */
+export const PAPER_RISK_LOT_SIZE = 1;
+
 export interface PaperIssue {
   field: string;
   reason: string;
@@ -56,6 +68,23 @@ export interface PaperSessionConfig {
   brokeragePaise: number;
   evaluate: StrategyEvaluate;
   params: StrategyParams;
+  /**
+   * M2-D RiskGuard gate. Absent → frozen M2-A/M2-B fixed-quantity path.
+   * Present → gated `stepPaper` path using `decidePosition` with these
+   * exact values. Both must appear together and equal the locked M2-D
+   * configuration (`riskBps = 100`, `lotSize = 1`).
+   */
+  riskBps?: number;
+  lotSize?: number;
+}
+
+/** M2-D risk-block diagnostic: a RiskGuard gate refusal. Distinct from M1-C `rejectedEntries`. */
+export interface PaperRiskBlock {
+  date: string;
+  code: RiskGuardBlockedCode | "quantity-cap";
+  reason: string;
+  entryPaise: number;
+  stopPaise: number;
 }
 
 /**
@@ -114,6 +143,8 @@ export interface PaperSessionState {
   diagnostics: BacktestDiagnostics;
   /** Current prefix rejections, verbatim from the oracle. */
   rejectedEntries: readonly BacktestRejectedEntry[];
+  /** M2-D RiskGuard gate refusals. Empty on the frozen M2-A/M2-B path. */
+  riskBlocks: readonly PaperRiskBlock[];
 }
 
 export type PaperSessionResult =
@@ -157,6 +188,25 @@ function checkConfig(config: PaperSessionConfig): PaperIssue | null {
   if (validateStrategyParams(config.params).status === "invalid") {
     return { field: "params", reason: "params must satisfy the frozen strategy relations." };
   }
+  const riskBpsSet = config.riskBps !== undefined;
+  const lotSizeSet = config.lotSize !== undefined;
+  if (riskBpsSet !== lotSizeSet) {
+    return {
+      field: "riskBps",
+      reason: "riskBps and lotSize must appear together for the M2-D gate.",
+    };
+  }
+  if (riskBpsSet && lotSizeSet) {
+    if (config.riskBps !== PAPER_RISK_BPS) {
+      return { field: "riskBps", reason: `riskBps must be exactly ${PAPER_RISK_BPS} for M2-D.` };
+    }
+    if (config.lotSize !== PAPER_RISK_LOT_SIZE) {
+      return {
+        field: "lotSize",
+        reason: `lotSize must be exactly ${PAPER_RISK_LOT_SIZE} for M2-D.`,
+      };
+    }
+  }
   return null;
 }
 
@@ -185,6 +235,7 @@ export function createPaperSession(config: PaperSessionConfig): PaperSessionResu
         rejectedEntries: 0,
       }),
       rejectedEntries: Object.freeze([]),
+      riskBlocks: Object.freeze([]),
     }),
   };
 }
@@ -398,6 +449,7 @@ export function appendPaperBar(session: PaperSessionState, bar: Bar): PaperSessi
       pending: pendingOrIssue,
       diagnostics: oracle.diagnostics,
       rejectedEntries: oracle.rejectedEntries,
+      riskBlocks: session.riskBlocks ?? Object.freeze([]),
     }),
   };
 }
@@ -502,12 +554,16 @@ function buildStepperClose(
     return { field: "bars", reason: "Entry bar no longer reproduces the recorded entry fill." };
   }
   const sell = applySlippage(exitRaw, "sell", config.slippageBps);
-  const sellTurnover = sell.fillPricePaise * config.quantity;
+  // M2-D: close economics use the position quantity (variable under the
+  // RiskGuard gate). On the frozen M2-A/M2-B path open.quantity always equals
+  // config.quantity, so this is byte-identical there.
+  const quantity = open.quantity;
+  const sellTurnover = sell.fillPricePaise * quantity;
   if (!Number.isSafeInteger(sellTurnover)) {
     return { field: "quantity", reason: "Exit turnover exceeds safe integer range." };
   }
   const sellStatutory = calculateFillCosts(sellTurnover, "sell", config.brokeragePaise).totalPaise;
-  const grossBig = BigInt(sell.fillPricePaise - open.entryFillPaise) * BigInt(config.quantity);
+  const grossBig = BigInt(sell.fillPricePaise - open.entryFillPaise) * BigInt(quantity);
   const gross = toSafeNumber(grossBig);
   const net = gross === null ? null : gross - (open.buyStatutoryPaise + sellStatutory);
   if (gross === null || net === null || !Number.isSafeInteger(net)) {
@@ -517,7 +573,7 @@ function buildStepperClose(
     id: paperTradeId({ entryDate: open.entryDate, exitDate }),
     entryDate: open.entryDate,
     exitDate,
-    quantity: config.quantity,
+    quantity,
     entryRawPricePaise: entry.rawPricePaise,
     exitRawPricePaise: exitRaw,
     entryFillPricePaise: entry.fillPricePaise,
@@ -531,6 +587,49 @@ function buildStepperClose(
     exitReason: reason,
     forcedExitAtEnd: false,
   });
+}
+
+/**
+ * M2-D quantity resolver (the only permitted extraction). Frozen path:
+ * returns the configured fixed quantity without calling RiskGuard. Gated
+ * path: calls the pure `decidePosition` once with the next-bar raw open,
+ * current session cash, locked riskBps/lotSize, and the verbatim pending
+ * stop. The gate result (allowed quantity or block) is authoritative — there
+ * is no second sizing calculation and no clamp.
+ */
+type EntryQuantityResolution =
+  | { kind: "fixed"; quantity: number }
+  | { kind: "gated-allowed"; quantity: number }
+  | { kind: "gated-blocked"; code: PaperRiskBlock["code"]; reason: string };
+
+function resolveEntryQuantity(
+  config: PaperSessionConfig,
+  cashPaise: number,
+  rawOpenPaise: number,
+  stopPaise: number,
+): EntryQuantityResolution {
+  if (config.riskBps === undefined || config.lotSize === undefined) {
+    return { kind: "fixed", quantity: config.quantity };
+  }
+  const gate = decidePosition({
+    capitalPaise: cashPaise,
+    riskBps: config.riskBps,
+    direction: "long",
+    entryPaise: rawOpenPaise,
+    stopPaise,
+    lotSize: config.lotSize,
+  });
+  if (gate.status === "blocked") {
+    return { kind: "gated-blocked", code: gate.code, reason: gate.reason };
+  }
+  if (gate.quantity < 1 || gate.quantity > BACKTEST_MAX_QUANTITY) {
+    return {
+      kind: "gated-blocked",
+      code: "quantity-cap",
+      reason: `RiskGuard quantity ${gate.quantity} exceeds maximum ${BACKTEST_MAX_QUANTITY}.`,
+    };
+  }
+  return { kind: "gated-allowed", quantity: gate.quantity };
 }
 
 /**
@@ -575,6 +674,7 @@ export function stepPaper(session: PaperSessionState, bar: Bar): PaperSessionRes
   let open = session.open;
   let pending = session.pending;
   const rejected: BacktestRejectedEntry[] = [...session.rejectedEntries];
+  const riskBlocks: PaperRiskBlock[] = [...(session.riskBlocks ?? [])];
   const ledger: PaperLedgerEntry[] = [...session.ledger];
   let entriesExecuted = session.diagnostics.entriesExecuted;
 
@@ -607,40 +707,63 @@ export function stepPaper(session: PaperSessionState, bar: Bar): PaperSessionRes
     if (open !== null) {
       return fail("pending", "Stale entry intent cannot coexist with an open position.");
     }
-    const buy = applySlippage(bar.openPaise, "buy", stepperConfig.slippageBps);
-    if (pending.stopPaise >= buy.fillPricePaise) {
-      rejected.push(
+    // M2-D gate: RiskGuard runs only here, after the next-bar raw open is
+    // known. Sizing uses the raw open; slippage and the non-protective-stop
+    // check below run afterwards on the approved quantity with no resize.
+    const resolution = resolveEntryQuantity(
+      session.config,
+      session.cashPaise,
+      bar.openPaise,
+      pending.stopPaise,
+    );
+    if (resolution.kind === "gated-blocked") {
+      riskBlocks.push(
         Object.freeze({
           date,
-          reason: "non-protective-stop",
+          code: resolution.code,
+          reason: resolution.reason,
+          entryPaise: bar.openPaise,
           stopPaise: pending.stopPaise,
-          entryFillPricePaise: buy.fillPricePaise,
         }),
       );
+      pending = null;
     } else {
-      const buyTurnover = buy.fillPricePaise * stepperConfig.quantity;
-      if (!Number.isSafeInteger(buyTurnover)) {
-        return fail("quantity", "Entry turnover exceeds safe integer range.");
+      const quantity = resolution.quantity;
+      const buy = applySlippage(bar.openPaise, "buy", stepperConfig.slippageBps);
+      if (pending.stopPaise >= buy.fillPricePaise) {
+        rejected.push(
+          Object.freeze({
+            date,
+            reason: "non-protective-stop",
+            stopPaise: pending.stopPaise,
+            entryFillPricePaise: buy.fillPricePaise,
+          }),
+        );
+      } else {
+        const buyTurnover = buy.fillPricePaise * quantity;
+        if (!Number.isSafeInteger(buyTurnover)) {
+          return fail("quantity", "Entry turnover exceeds safe integer range.");
+        }
+        const buyStatutory = calculateFillCosts(
+          buyTurnover,
+          "buy",
+          stepperConfig.brokeragePaise,
+        ).totalPaise;
+        open = Object.freeze({
+          symbol,
+          side: "long",
+          quantity,
+          entryDate: date,
+          entryFillPaise: buy.fillPricePaise,
+          buyStatutoryPaise: buyStatutory,
+          stopPaise: pending.stopPaise,
+          targetPaise: pending.targetPaise,
+          status: "open",
+        }) as PaperOpenPosition;
+        entriesExecuted += 1;
       }
-      const buyStatutory = calculateFillCosts(
-        buyTurnover,
-        "buy",
-        stepperConfig.brokeragePaise,
-      ).totalPaise;
-      open = Object.freeze({
-        symbol,
-        side: "long",
-        quantity: stepperConfig.quantity,
-        entryDate: date,
-        entryFillPaise: buy.fillPricePaise,
-        buyStatutoryPaise: buyStatutory,
-        stopPaise: pending.stopPaise,
-        targetPaise: pending.targetPaise,
-        status: "open",
-      }) as PaperOpenPosition;
-      entriesExecuted += 1;
+      pending = null;
     }
-    pending = null;
   }
 
   let pendingExit = pending !== null && pending.kind === "exit";
@@ -723,6 +846,7 @@ export function stepPaper(session: PaperSessionState, bar: Bar): PaperSessionRes
         rejectedEntries: rejected.length,
       }),
       rejectedEntries: Object.freeze(rejected),
+      riskBlocks: Object.freeze(riskBlocks),
     }),
   };
 }

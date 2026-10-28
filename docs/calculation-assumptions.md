@@ -704,7 +704,68 @@ realized`. Trade identity `entryDate>exitDate`; the ledger is rebuilt from
   economics, no future-bar visibility)
 - **Limitations:** fixed quantity, no RiskGuard sizing, no persistence, no
   live data, no broker, no AI. Risk integration is M2-D and requires this
-  stepper — it is not built here. Not investment advice, not a prediction.
+  stepper - it is not built here. Not investment advice, not a prediction.
+
+### SLAB-PAPER-003 - RiskGuard-gated paper stepper (M2-D)
+
+- **Tool:** Strategy Lab (`features/strategy-lab/paper.ts`, `stepPaper` gated
+  path via `resolveEntryQuantity`; constants `PAPER_RISK_BPS`,
+  `PAPER_RISK_LOT_SIZE`; diagnostics `riskBlocks`)
+- **Status:** shipped (M2-D)
+- **Definition:** the M2-D economic change only — variable entry quantity from
+  the frozen RG-001 `decidePosition`. Gate timing: RiskGuard runs only after
+  the next bar's raw open is known, with `capital = current session.cashPaise`,
+  `entry = bar.openPaise` (raw), `stop = pending.stopPaise` verbatim,
+  `direction = "long"`, `riskBps = 100`, `lotSize = 1`, no target (omitted even
+  when the pending intent carries one, per SLAB-STRAT-001). The approved
+  quantity executes at the 5 bps slipped open with no resize; the existing
+  M1-C non-protective-stop check then runs against the actual slipped fill.
+- **Session config (fictional, frozen for M2-D):** `startingCashPaise =
+10_000_000`, `riskBps = 100`, `lotSize = 1`, `slippageBps = 5`,
+  `brokeragePaise = 2000` (Rs 20/fill). Capital source is current session cash
+  at the entry bar — never cached starting cash, never unrealized equity, no
+  margin/leverage/reserved-cash/derivatives. Fixed `quantity = 1` remains for
+  the frozen M2-A/M2-B paths only.
+- **Execution order (frozen):** validate bar frontier as M2-B does; if a
+  pending entry exists, read raw open, call RiskGuard, on block append a risk
+  block and consume pending, on allow execute at the RiskGuard quantity then
+  apply M1-C slippage and the non-protective-stop check; protective exits
+  before signal exits; strategy evaluates at close on `bars[0..t]`; store the
+  next pending intent.
+- **Risk-block semantics:** any RiskGuard block (all four `decidePosition`
+  codes plus the `quantity-cap` for gate quantity above
+  `BACKTEST_MAX_QUANTITY = 1_000_000`, never clamped) yields no position, no
+  trade, no costs, no cash mutation, with pending consumed. Recorded as
+  `riskBlocks: readonly { date, code, reason, entryPaise, stopPaise }[]` —
+  distinct from M1-C `rejectedEntries`, which remain authoritative for
+  post-slippage non-protective fills (gate quantity discarded there).
+- **Architectural exception:** direct one-directional acyclic import of the
+  pure `decidePosition` from `@/features/risk-guard/risk-guard` with no
+  adapter, interface, engine, or event bus. Documented here and in the
+  `paper.ts` header; the `strategy-lab-paper.test.ts` purity scan allowlists
+  exactly this specifier.
+- **Units:** integer paise throughout; exact BigInt P&L identities; read-time
+  unrealized P&L derived on demand, never stored.
+- **Rounding policy:** none of its own (frozen `applySlippage` /
+  `calculateFillCosts` per fill; RG-001 floor-to-lot inside the gate).
+- **Edge cases:** stale entry intent with an open position, unreproducible
+  entry fills, missing entry bars, and unsafe-integer accounting all fail
+  loudly as `invalid` instead of guessing. M2-C persistence remains deferred.
+- **Source:** orchestration of frozen M1/M2-A/M2-B contracts plus frozen RG-001
+  arithmetic only. No employer material, no proprietary method.
+- **Effective date:** n/a
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-paper-risk.test.ts` (locked config,
+  gate timing, raw-open sizing, riskBps/lotSize/cash inputs, variable
+  quantity, all block codes plus quantity-cap, pending consumption,
+  side-effect-free blocks, riskBlocks observability, M1-C rejection ordering,
+  raw-vs-slip sizing proof, no-resize, multi-trade capital freshness, M1-C
+  field-for-field equivalence incl. protective exits, determinism, no
+  future-bar leakage, M2-A/M2-B preservation)
+- **Limitations:** single position, no partial fills, no persistence, no live
+  data, no broker, no AI. A paper sizing gate on a synthetic fixture — proves
+  deterministic risk integration, not tradability. Not investment advice, not
+  a prediction.
 
 ---
 
@@ -751,8 +812,9 @@ broker. A rate change is a data change, not a formula change.
 - SLAB-SENS-001 — Execution-cost sensitivity harness (v1.0.0, shipped). See §6.
 - SLAB-SPLIT-001 — Frozen IS/OOS research split (v1.0.0, frozen). See §6.
 - SLAB-MET-001 — Research metrics over sensitivity legs (v1.0.0, shipped). See §6.
-- SLAB-PAPER-001 — Replay paper session (v1.0.0, shipped). See §6.
-- SLAB-PAPER-002 — Explicit single-bar paper stepper (v1.0.0, shipped). See §6.
+- SLAB-PAPER-001 - Replay paper session (v1.0.0, shipped). See §6.
+- SLAB-PAPER-002 - Explicit single-bar paper stepper (v1.0.0, shipped). See §6.
+- SLAB-PAPER-003 - RiskGuard-gated paper stepper (v1.0.0, shipped). See §6.
 
 ---
 

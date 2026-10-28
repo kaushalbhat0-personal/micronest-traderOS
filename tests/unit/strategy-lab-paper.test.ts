@@ -419,11 +419,15 @@ describe("paper domain purity", () => {
     }
   });
 
-  it("imports only frozen strategy-lab contracts", () => {
+  it("imports only frozen strategy-lab contracts plus the SLAB-PAPER-003 RiskGuard exception", () => {
     for (const match of source.matchAll(/from\s+["']([^"']+)["']/g)) {
       const specifier = match[1] as string;
       if (specifier.startsWith("@/features/")) {
-        expect(specifier.startsWith("@/features/strategy-lab/")).toBe(true);
+        const allowed =
+          specifier.startsWith("@/features/strategy-lab/") ||
+          // SLAB-PAPER-003 approved exception: one-directional pure RiskGuard import.
+          specifier === "@/features/risk-guard/risk-guard";
+        expect(allowed, `unexpected cross-feature import: ${specifier}`).toBe(true);
       }
       expect(specifier.startsWith("node:")).toBe(false);
     }
