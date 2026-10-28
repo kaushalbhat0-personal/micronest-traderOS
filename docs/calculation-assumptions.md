@@ -1,6 +1,6 @@
 # Calculation Assumptions & Provenance
 
-**Status:** SL-001 (StrikeLens) and GM-001 (GreekMap) specified alongside RG-001, TP-001 and TC-001, plus SLAB-DATA-001 (Strategy Lab dataset boundary). No other trading calculation is implemented yet.
+**Status:** SL-001 (StrikeLens) and GM-001 (GreekMap) specified alongside RG-001, TP-001 and TC-001, plus SLAB-DATA-001 (Strategy Lab dataset boundary) and SLAB-STRAT-001 (Strategy Lab reference strategy). No other trading calculation is implemented yet.
 
 This document is the single place to record where a formula comes from, what it assumes, and how
 it is tested. A calculation must have a record here **before** it ships.
@@ -371,6 +371,55 @@ Tool-specific deviations must be recorded in the formula entry.
   model illustration and is not an NSE settlement or exchange pricing calculation."
   The model value is not a prediction; scenarios are not forecasts. Not investment advice.
 
+### SLAB-STRAT-001 — SMA cross with N-bar-low stop
+
+- **Tool:** Strategy Lab (`features/strategy-lab/strategies/sma-cross.ts`, `evaluateSmaCross`;
+  contracts in `features/strategy-lab/strategy.ts`)
+- **Status:** shipped (M1-B)
+- **Definition:**
+  - averages use close prices; comparisons use exact integer cross-products over
+    BigInt sums — `fastAvg > slowAvg ⟺ fastSum × slowPeriod > slowSum × fastPeriod`.
+    No division, no floating point.
+  - entry (FLAT only): previous relation `≤ 0` (fast at or below slow) and current
+    relation `> 0` at the close of the last supplied bar. Strict cross only —
+    sustained leadership never re-triggers.
+  - exit (LONG only): previous relation `≥ 0` and current relation `< 0`.
+  - `stopPaise` = lowest `lowPaise` of the last `stopLookback` bars including the
+    signal bar. Proposed as-is: never clamped, never moved; protectiveness
+    relative to the actual fill is an M1-C execution rule, not a strategy rule.
+  - `targetPaise` is always null for SLAB-STRAT-001; exits are cross-driven.
+- **Inputs:** `bars` (visible window `0..t` only), `position` (flat/long view),
+  `params` (`fastPeriod: 10`, `slowPeriod: 30`, `stopLookback: 20`, `minBars: 30`).
+- **Outputs:** `no-signal` | `entry { direction: "long", stopPaise, targetPaise: null, note }`
+  | `exit { note }`. Notes are factual trace labels (≤ 140 chars), never advice.
+- **Assumptions:** long-only; delivery daily-bar research; fewer than `minBars`
+  bars (or insufficient cross history) yields `no-signal`, never a fabricated
+  decision; next-bar execution and stop-vs-fill handling belong to M1-C.
+- **Units:** paise for all money; integer bar counts; plain relations (-1/0/1).
+- **Rounding policy:** none — integer sums, products, and comparisons are exact.
+- **Edge cases:**
+  - warm-up (`bars.length < minBars`) → `no-signal`
+  - insufficient cross history at `t-1` → `no-signal`
+  - insufficient stop window → `no-signal` (no stop is proposed, not a weak one)
+  - stop at/above the signal close → proposed unchanged (M1-C decides validity)
+  - invalid params → `no-signal`; strict validation lives at the boundary
+    (`0 < fast < slow`, `stopLookback ≥ 1`, `minBars ≥ slow`)
+  - LONG ignores entry crosses; FLAT ignores exit crosses; no pyramiding, no reversal
+- **Source:** independently derived from the public textbook definition of the
+  simple moving average and the standard strict-crossover rule. No employer
+  material, no proprietary method, no Brahmos logic.
+- **Effective date:** n/a (not a statutory rate)
+- **Implementation version:** 1.0.0
+- **Tests:** `tests/unit/strategy-lab-strategy.test.ts` (cross-product exactness
+  incl. product-scale values, strict entry/exit, equality transitions, no-repeat
+  behavior, warm-up gates, stop window/min/current-bar/unchanged-stop semantics,
+  position gating, param validation, determinism, note length/language,
+  anti-lookahead window identity)
+- **Limitations:** a signal on a research fixture is a historical-simulation
+  input, not a recommendation. The strategy has no notion of costs, slippage,
+  liquidity, or risk — those belong to later M1 phases. Not investment advice,
+  not a prediction.
+
 ---
 
 ## 7. Statutory rate data (TradeCost)
@@ -410,6 +459,7 @@ broker. A rate change is a data change, not a formula change.
 - SL-001 — Option strike comparison (StrikeLens, v1.0.0, shipped). See §6.
 - GM-001 — Single-option BSM-Merton price and Greeks with fixed scenarios (GreekMap, v1.0.0, shipped). See §6.
 - SLAB-DATA-001 — Strategy Lab historical dataset boundary (v1.0.0, shipped). See §10.
+- SLAB-STRAT-001 — SMA cross with N-bar-low stop (v1.0.0, shipped). See §6.
 
 ---
 

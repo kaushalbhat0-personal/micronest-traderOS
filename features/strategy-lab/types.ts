@@ -68,5 +68,21 @@ export const STRATEGY_LAB_MAX_PAISE = 100_000_000_000;
 /** Largest accepted share volume per bar. Well inside safe-integer range. */
 export const STRATEGY_LAB_MAX_VOLUME = 1_000_000_000_000;
 
+/** Frozen reference parameters for SLAB-STRAT-001. The only M1 parameter set. */
+export interface StrategyParams {
+  fastPeriod: number;
+  slowPeriod: number;
+  stopLookback: number;
+  minBars: number;
+}
+
+/** Locked M1 reference set. No sweeps, no alternatives in M1. */
+export const STRATEGY_LAB_REFERENCE_PARAMS: StrategyParams = {
+  fastPeriod: 10,
+  slowPeriod: 30,
+  stopLookback: 20,
+  minBars: 30,
+};
+
 /** Canonical CSV schema. Exactly one schema exists in M1. No quoted fields. */
 export const STRATEGY_LAB_CSV_HEADER = "date,symbol,open,high,low,close,volume";

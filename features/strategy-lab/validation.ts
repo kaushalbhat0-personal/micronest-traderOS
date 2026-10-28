@@ -8,6 +8,7 @@ import {
   STRATEGY_LAB_SESSION,
   STRATEGY_LAB_TIMEZONE,
   type DatasetManifest,
+  type StrategyParams,
 } from "@/features/strategy-lab/types";
 
 /**
@@ -236,4 +237,66 @@ export function validateManifestShape(raw: unknown): ManifestShapeResult {
     rowCount: raw["rowCount"] as number,
   };
   return { status: "ok", manifest };
+}
+
+export type StrategyParamsResult =
+  { status: "ok"; params: StrategyParams } | { status: "invalid"; errors: FieldIssue[] };
+
+/**
+ * Validates a strategy parameter object against the locked M1 relations:
+ * `0 < fastPeriod < slowPeriod`, `stopLookback >= 1`, `minBars >= slowPeriod`.
+ * All values must be safe integers. No ranges, no defaults, no coercion.
+ */
+export function validateStrategyParams(raw: unknown): StrategyParamsResult {
+  const errors: FieldIssue[] = [];
+  const reject = (field: string, reason: string): void => {
+    errors.push({ row: 0, field, reason });
+  };
+
+  if (!isRecord(raw)) {
+    return {
+      status: "invalid",
+      errors: [{ row: 0, field: "params", reason: "Params must be an object." }],
+    };
+  }
+
+  const checkInt = (field: string): number | null => {
+    const value = raw[field];
+    if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+      reject(field, `${field} must be a safe integer.`);
+      return null;
+    }
+    return value;
+  };
+
+  const fast = checkInt("fastPeriod");
+  const slow = checkInt("slowPeriod");
+  const lookback = checkInt("stopLookback");
+  const minBars = checkInt("minBars");
+
+  if (fast !== null && fast < 1) {
+    reject("fastPeriod", "fastPeriod must be at least 1.");
+  }
+  if (fast !== null && slow !== null && fast >= slow) {
+    reject("fastPeriod", "fastPeriod must be strictly less than slowPeriod.");
+  }
+  if (lookback !== null && lookback < 1) {
+    reject("stopLookback", "stopLookback must be at least 1.");
+  }
+  if (slow !== null && minBars !== null && minBars < slow) {
+    reject("minBars", "minBars must be at least slowPeriod.");
+  }
+
+  if (errors.length > 0) {
+    return { status: "invalid", errors };
+  }
+  return {
+    status: "ok",
+    params: {
+      fastPeriod: fast as number,
+      slowPeriod: slow as number,
+      stopLookback: lookback as number,
+      minBars: minBars as number,
+    },
+  };
 }
